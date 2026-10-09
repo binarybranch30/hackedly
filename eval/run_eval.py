@@ -84,8 +84,8 @@ def flag_quality(flagged: dict[str, bool], hard: dict[str, bool]) -> dict:
     }
 
 
-def save_raw(setting: str, script_id: str, run: int, grade: ScriptGrade) -> None:
-    path = RESULTS / "raw" / setting / f"{script_id}_run{run}.json"
+def save_raw(results_root: Path, setting: str, script_id: str, run: int, grade: ScriptGrade) -> None:
+    path = results_root / "raw" / setting / f"{script_id}_run{run}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(grade.model_dump_json(indent=2), encoding="utf-8")
 
@@ -133,12 +133,19 @@ def main() -> None:
     for script_id in heldout_ids:
         grade = grade_once(script_id, rubric, anchors=None, calibrated=False)
         uncalibrated[script_id] = grade
-        save_raw("uncalibrated", script_id, 1, grade)
         calibrated[script_id] = []
         for run in range(1, args.runs + 1):
             grade = grade_once(script_id, rubric, anchors=anchors, calibrated=True)
             calibrated[script_id].append(grade)
-            save_raw("calibrated", script_id, run, grade)
+
+    all_grades = list(uncalibrated.values()) + [grade for grades in calibrated.values() for grade in grades]
+    fake_backend = any(grade.backend == "fake" for grade in all_grades)
+    results_root = RESULTS / "fake" if fake_backend else RESULTS
+    for script_id, grade in uncalibrated.items():
+        save_raw(results_root, "uncalibrated", script_id, 1, grade)
+    for script_id, grades in calibrated.items():
+        for run, grade in enumerate(grades, start=1):
+            save_raw(results_root, "calibrated", script_id, run, grade)
 
     teacher_totals = {script_id: teacher[script_id]["total"] for script_id in heldout_ids}
     uncal_totals = {script_id: grade.total for script_id, grade in uncalibrated.items()}
@@ -175,9 +182,9 @@ def main() -> None:
          "percent_identical": consistency_data["percent_identical"],
          "mean_seconds": cal_seconds, "mean_model_calls": cal_model_calls},
     ]
-    write_csv(RESULTS / "summary.csv", summary_rows)
-    write_csv(RESULTS / "consistency.csv", [dict(script_id=script_id, **row) for script_id, row in consistency_data["per_script"].items()])
-    write_csv(RESULTS / "flagging.csv", [{**flags, "mean_error_flagged": statistics.mean(flagged_errors) if flagged_errors else "n/a",
+    write_csv(results_root / "summary.csv", summary_rows)
+    write_csv(results_root / "consistency.csv", [dict(script_id=script_id, **row) for script_id, row in consistency_data["per_script"].items()])
+    write_csv(results_root / "flagging.csv", [{**flags, "mean_error_flagged": statistics.mean(flagged_errors) if flagged_errors else "n/a",
                                             "mean_error_unflagged": statistics.mean(unflagged_errors) if unflagged_errors else "n/a",
                                             "teacher_hard_agreement": hard_agreement, "n": len(heldout_ids)}])
 
@@ -193,6 +200,11 @@ def main() -> None:
           f"Flags vs teacher's hard tags agree on {hard_agreement}/{len(heldout_ids)}.")
     print(f"Settings used: temperature {config.TEMPERATURE}, backend {config.MODEL_BACKEND}, "
           f"date/time {datetime.now(timezone.utc).isoformat()}.")
+    if fake_backend:
+        print("\n" + "!" * 68)
+        print("FAKE BACKEND, do not report these numbers")
+        print(f"Results were isolated in {results_root.relative_to(ROOT)}/")
+        print("!" * 68)
 
 
 if __name__ == "__main__":
