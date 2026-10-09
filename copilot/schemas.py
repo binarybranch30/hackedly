@@ -100,6 +100,8 @@ class ScriptGrade(BaseModel):
     max_total: int = 0
     flags: list[str] = Field(default_factory=list)
     status: Status = "needs_review"
+    seconds: float = 0.0              # wall-clock time to grade this script
+    model_calls: int = 0              # number of model requests (incl. retries)
 
 
 class AuditEntry(BaseModel):
