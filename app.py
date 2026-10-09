@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from copilot import audit, config, pipeline, store
 from copilot.schemas import AnchorGrade, Rubric, RubricItem, Script
+from ui import theme
 
 
 def saved_image(script_id: str, folder: str) -> Path | None:
@@ -49,15 +50,41 @@ def save_upload(upload, directory: Path, script_id: str) -> Path:
 
 
 st.set_page_config(page_title="AnchorGrade", layout="wide")
-st.title("AnchorGrade — handwritten answer grading copilot")
-st.caption(f"Backend: **{config.MODEL_BACKEND}** · Nothing is released until the teacher approves.")
+theme.inject_css()
 
-rubric = store.load_rubric()
-tab_rubric, tab_anchors, tab_grade, tab_review, tab_export, tab_audit = st.tabs(
-    ["Rubric", "Anchors", "Grade", "Review", "Export", "Audit log"])
+grades_for_dashboard = store.load_grades()
+page = theme.sidebar_nav(["Dashboard", "Rubric", "Anchors", "Grade", "Review", "Export", "Audit log"])
+rubric = st.session_state.get("rubric_draft", store.load_rubric())
 
-with tab_rubric:
-    st.subheader("Rubric")
+if page == "Dashboard":
+    theme.page_header("AnchorGrade", "Handwritten-answer grading with teacher control.")
+    cards = st.columns(4)
+    cards[0].write("")
+    with cards[0]:
+        theme.stat_card("Scripts graded", len(grades_for_dashboard), "▤", "primary")
+    with cards[1]:
+        theme.stat_card("Need review", sum(g.status == "needs_review" for g in grades_for_dashboard), "!", "warning")
+    with cards[2]:
+        theme.stat_card("Approved", sum(g.status in ("approved", "released") for g in grades_for_dashboard), "✓", "success")
+    with cards[3]:
+        theme.stat_card("Anchors saved", len(store.load_anchors()), "⚓", "info")
+    st.caption(f"Backend: {config.MODEL_BACKEND} · Nothing is released until the teacher approves.")
+
+if page == "Rubric":
+    theme.page_header("Rubric", "Set the marking criteria or draft it from a question-paper photo.")
+    rubric_upload = st.file_uploader("Question-paper image (optional AI draft)", type=["jpg", "jpeg", "png"], key="rubric-upload")
+    if rubric_upload and st.button("Draft rubric from image"):
+        try:
+            source = save_upload(rubric_upload, config.DATA_DIR / "rubric", "question-paper")
+            draft, problems = pipeline.extract_rubric(str(source))
+            st.session_state["rubric_draft"] = draft
+            if problems:
+                st.warning("Draft needs review: " + "; ".join(problems))
+            else:
+                st.success("Rubric draft ready for teacher review.")
+            st.rerun()
+        except Exception as exc:
+            st.error(f"Could not draft rubric: {exc}")
     with st.form("rubric_form"):
         rubric_id = st.text_input("Rubric ID", value=rubric.rubric_id)
         question = st.text_area("Question", value=rubric.question)
@@ -88,13 +115,14 @@ with tab_rubric:
             if len({item.item_id for item in items}) != len(items):
                 raise ValueError("Rubric item IDs must be unique.")
             store.save_rubric(Rubric(rubric_id=rubric_id.strip(), question=question.strip(), items=items))
+            st.session_state.pop("rubric_draft", None)
             st.success("Rubric saved.")
             st.rerun()
         except (ValueError, ValidationError) as exc:
             st.error(f"Could not save rubric: {exc}")
 
-with tab_anchors:
-    st.subheader("Three teacher-graded anchors")
+if page == "Anchors":
+    theme.page_header("Anchors", "Teacher-marked examples calibrate the model to your marking style.")
     existing_anchors = {anchor.script_id: anchor for anchor in store.load_anchors()}
     with st.form("anchors_form"):
         anchor_values = []
@@ -104,7 +132,8 @@ with tab_anchors:
             st.markdown(f"#### Anchor {number}")
             script_id = st.text_input("Script ID", default_id, key=f"anchor-script-{number}")
             upload = st.file_uploader("Answer image", type=["jpg", "jpeg", "png"], key=f"anchor-upload-{number}")
-            transcription = st.text_area("Transcription", existing.transcription if existing else "", key=f"anchor-text-{number}")
+            drafts = st.session_state.get("anchor_transcriptions", {})
+            transcription = st.text_area("Transcription", drafts.get(script_id, existing.transcription if existing else ""), key=f"anchor-text-{number}")
             marks, notes = {}, {}
             for item in rubric.items:
                 cols = st.columns([1, 3])
@@ -117,6 +146,19 @@ with tab_anchors:
                     key=f"anchor-note-{number}-{item.item_id}")
             anchor_values.append((script_id, upload, transcription, marks, notes))
         save_anchors = st.form_submit_button("Save 3 anchors")
+        transcribe_anchors = st.form_submit_button("Transcribe uploaded images")
+    if transcribe_anchors:
+        try:
+            drafts = dict(st.session_state.get("anchor_transcriptions", {}))
+            for script_id, upload, _, _, _ in anchor_values:
+                if upload and script_id.strip():
+                    image_path = save_upload(upload, config.DATA_DIR / "anchors", script_id.strip())
+                    drafts[script_id.strip()] = pipeline.transcribe_image(str(image_path)).text
+            st.session_state["anchor_transcriptions"] = drafts
+            st.success("Anchor transcriptions are ready for teacher review.")
+            st.rerun()
+        except Exception as exc:
+            st.error(f"Could not transcribe anchors: {exc}")
     if save_anchors:
         try:
             anchors, ids = [], []
@@ -142,23 +184,31 @@ with tab_anchors:
         st.caption("Saved anchors")
         st.dataframe([{"script_id": a.script_id, "marks": a.marks, "transcription": a.transcription} for a in existing_anchors.values()])
 
-with tab_grade:
+if page == "Grade":
+    theme.page_header("Grade scripts", "Upload answer sheets and route uncertain work to teacher review.")
     uploads = st.file_uploader("Answer images", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
     if uploads and st.button("Grade all"):
         progress = st.progress(0, text="Starting grading…")
-        grades = []
-        for index, upload in enumerate(uploads, start=1):
+        scripts = []
+        for upload in uploads:
             script_id = Path(upload.name).stem
             image_path = save_upload(upload, config.DATA_DIR / "scripts", script_id)
-            grades.append(pipeline.grade_script(Script(script_id=script_id, image_path=str(image_path)), rubric,
-                                                store.load_anchors()))
-            progress.progress(index / len(uploads), text=f"Graded {index}/{len(uploads)}")
+            scripts.append(Script(script_id=script_id, image_path=str(image_path)))
+
+        def update_progress(done, total, _grade):
+            progress.progress(done / total, text=f"Graded {done}/{total}")
+
+        grades, drift_results = pipeline.grade_batch(scripts, rubric, store.load_anchors(), on_progress=update_progress)
         needs_review = sum(grade.status == "needs_review" for grade in grades)
         st.success(f"{len(grades)} graded · {needs_review} need review · {len(grades) - needs_review} auto-ok")
         for grade in grades:
             st.write(f"{grade.script_id}: {grade.total}/{grade.max_total} · {grade.status}")
+        for drift in drift_results:
+            if drift["drifted"]:
+                st.warning(f"Drift warning for {drift['anchor_id']}: {drift['diff']:+} marks from teacher.")
 
-with tab_review:
+if page == "Review":
+    theme.page_header("Review queue", "Flagged scripts appear first; approve only after checking the evidence.")
     grades = sorted(store.load_grades(), key=lambda grade: (grade.status != "needs_review", grade.script_id))
     if not grades:
         st.info("No graded scripts yet.")
@@ -169,8 +219,7 @@ with tab_review:
             if grade.backend != config.MODEL_BACKEND:
                 st.warning("Graded by local fallback model")
             if grade.flags:
-                badges = " ".join(f"<span style='background:#f8d7da;color:#842029;padding:3px 7px;border-radius:10px;margin-right:4px'>{html.escape(flag)}</span>" for flag in grade.flags)
-                st.markdown(badges, unsafe_allow_html=True)
+                theme.badges(grade.flags)
             image_col, text_col = st.columns(2)
             with image_col:
                 image_path = saved_image(grade.script_id, "scripts")
@@ -205,13 +254,15 @@ with tab_review:
                 pipeline.approve(grade.script_id, edits=edits)
                 st.rerun()
 
-with tab_export:
+if page == "Export":
+    theme.page_header("Export", "Download marks for scripts approved by the teacher.")
     if st.button("Export approved scripts to CSV"):
         out = Path(tempfile.mkdtemp()) / "marks.csv"
         count = pipeline.export_csv(out)
         st.download_button(f"Download marks.csv ({count} scripts)", out.read_bytes(), "marks.csv")
 
-with tab_audit:
+if page == "Audit log":
+    theme.page_header("Audit log", "Every model, system, and teacher action is recorded here.")
     script_filter = st.text_input("Filter by script ID")
     entries = list(reversed(audit.read_all()))
     if script_filter:
