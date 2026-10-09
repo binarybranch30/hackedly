@@ -9,6 +9,7 @@ Functions for the UI / eval:
   approve(script_id, edits) / export_csv(path)        teacher approval + release
 """
 import csv
+import time
 import uuid
 from pathlib import Path
 
@@ -32,10 +33,11 @@ def grade_script(script: Script, rubric: Rubric,
     Never raises for model problems: they become flags so a batch never crashes.
     With MODEL_BACKEND=fake it returns a varied fake grade (for UI work).
     """
+    start, calls0 = time.perf_counter(), models.call_count()
     if config.MODEL_BACKEND == "fake":
         grade = fake_script_grade(script.script_id, rubric)
         grade.calibrated = calibrated
-        _finish(grade, "FAKE grade (MODEL_BACKEND=fake)")
+        _finish(grade, "FAKE grade (MODEL_BACKEND=fake)", start, calls0)
         return grade
 
     sid = script.script_id
@@ -48,7 +50,7 @@ def grade_script(script: Script, rubric: Rubric,
     problem = _image_problem(script.image_path)
     if problem:
         grade.flags = [FLAG_UNREADABLE]
-        _finish(grade, f"image check failed: {problem}")
+        _finish(grade, f"image check failed: {problem}", start, calls0)
         return grade
 
     try:
@@ -63,7 +65,7 @@ def grade_script(script: Script, rubric: Rubric,
                              model=models.model_name(models.last_backend_used())))
         if t.legibility == "unreadable":
             grade.flags = [FLAG_UNREADABLE]
-            _finish(grade, "model could not read the handwriting")
+            _finish(grade, "model could not read the handwriting", start, calls0)
             return grade
 
         # 3. Grade twice (self-consistency)
@@ -77,7 +79,7 @@ def grade_script(script: Script, rubric: Rubric,
     except Exception as e:  # ModelError, network errors, ... -> flag, never crash the batch
         grade.flags = sorted(set(grade.flags) | {FLAG_MODEL_ERROR})
         audit.log(AuditEntry(actor="system", action="error", script_id=sid, reason=str(e)[:300]))
-        _finish(grade, f"model error: {type(e).__name__}")
+        _finish(grade, f"model error: {type(e).__name__}", start, calls0)
         return grade
 
     # 4. Rules + routing (code)
@@ -89,7 +91,7 @@ def grade_script(script: Script, rubric: Rubric,
         flags.add(FLAG_FALLBACK_USED)
         grade.backend = ",".join(sorted(backends_used))
     grade.items, grade.total, grade.flags = items, total, sorted(flags)
-    _finish(grade, f"run totals {total} and {total2}")
+    _finish(grade, f"run totals {total} and {total2}", start, calls0)
     return grade
 
 
@@ -107,12 +109,15 @@ def _image_problem(path: str) -> str | None:
     return None
 
 
-def _finish(grade: ScriptGrade, reason: str) -> None:
-    """Set status, save, and log the grade and any flags."""
+def _finish(grade: ScriptGrade, reason: str, start: float, calls0: int) -> None:
+    """Set status + timing, save, and log the grade and any flags."""
     grade.status = "needs_review" if grade.flags else "auto_ok"
+    grade.seconds = round(time.perf_counter() - start, 2)
+    grade.model_calls = models.call_count() - calls0
     store.save_grade(grade)
     audit.log(AuditEntry(actor="system", action="grade", script_id=grade.script_id,
-                         after=f"{grade.total}/{grade.max_total}", reason=reason,
+                         after=f"{grade.total}/{grade.max_total}",
+                         reason=f"{reason} ({grade.seconds}s, {grade.model_calls} model calls)",
                          backend=grade.backend, model=grade.model))
     if grade.flags:
         audit.log(AuditEntry(actor="system", action="flag", script_id=grade.script_id,

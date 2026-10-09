@@ -23,6 +23,7 @@ T = TypeVar("T", bound=BaseModel)
 
 _last_backend = config.MODEL_BACKEND
 _gemini_client = None
+_call_count = 0
 
 MAX_IMAGE_SIDE = 2000  # px; phone photos are shrunk to this before sending
 
@@ -42,6 +43,11 @@ class RateLimited(Exception):
 def last_backend_used() -> str:
     """Which backend actually produced the last answer (matters after fallback)."""
     return _last_backend
+
+
+def call_count() -> int:
+    """Total model requests made so far (including retries); used for cost/speed stats."""
+    return _call_count
 
 
 def model_name(backend: str) -> str:
@@ -131,6 +137,8 @@ def _strip_fences(raw: str) -> str:
 def _call_backend(backend: str, system: str, prompt: str,
                   image_path: Optional[str | Path], schema: Type[BaseModel]) -> str:
     """Return the model's raw text reply."""
+    global _call_count
+    _call_count += 1
     if backend == "gemini":
         return _call_gemini(system, prompt, image_path, schema)
     if backend == "ollama":
