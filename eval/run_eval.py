@@ -84,8 +84,8 @@ def flag_quality(flagged: dict[str, bool], hard: dict[str, bool]) -> dict:
     }
 
 
-def save_raw(setting: str, script_id: str, run: int, grade: ScriptGrade) -> None:
-    path = RESULTS / "raw" / setting / f"{script_id}_run{run}.json"
+def save_raw(results_root: Path, setting: str, script_id: str, run: int, grade: ScriptGrade) -> None:
+    path = results_root / "raw" / setting / f"{script_id}_run{run}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(grade.model_dump_json(indent=2), encoding="utf-8")
 
@@ -133,19 +133,27 @@ def main() -> None:
     for script_id in heldout_ids:
         grade = grade_once(script_id, rubric, anchors=None, calibrated=False)
         uncalibrated[script_id] = grade
-        save_raw("uncalibrated", script_id, 1, grade)
         calibrated[script_id] = []
         for run in range(1, args.runs + 1):
             grade = grade_once(script_id, rubric, anchors=anchors, calibrated=True)
             calibrated[script_id].append(grade)
-            save_raw("calibrated", script_id, run, grade)
+
+    all_grades = list(uncalibrated.values()) + [grade for grades in calibrated.values() for grade in grades]
+    fake_backend = any(grade.backend == "fake" for grade in all_grades)
+    results_root = RESULTS / "fake" if fake_backend else RESULTS
+    for script_id, grade in uncalibrated.items():
+        save_raw(results_root, "uncalibrated", script_id, 1, grade)
+    for script_id, grades in calibrated.items():
+        for run, grade in enumerate(grades, start=1):
+            save_raw(results_root, "calibrated", script_id, run, grade)
 
     teacher_totals = {script_id: teacher[script_id]["total"] for script_id in heldout_ids}
     uncal_totals = {script_id: grade.total for script_id, grade in uncalibrated.items()}
     cal_reference = {script_id: grades[0] for script_id, grades in calibrated.items()}
     cal_totals = {script_id: grade.total for script_id, grade in cal_reference.items()}
     item_mae = lambda grades: {item.item_id: statistics.mean(abs(
-        next(graded.final_marks for graded in grades[script_id].items if graded.item_id == item.item_id)
+        next((graded.final_marks for graded in grades[script_id].items
+              if graded.item_id == item.item_id), 0)
         - teacher[script_id]["items"][item.item_id]) for script_id in heldout_ids) for item in rubric.items}
     uncal_item_mae, cal_item_mae = item_mae(uncalibrated), item_mae(cal_reference)
     consistency_data = consistency({script_id: [grade.total for grade in grades] for script_id, grades in calibrated.items()})
@@ -157,26 +165,33 @@ def main() -> None:
     unflagged_errors = [errors[s] for s in heldout_ids if not flagged[s]]
     teacher_hard = {script_id: teacher[script_id]["hard"] for script_id in heldout_ids}
     hard_agreement = sum(flagged[s] == teacher_hard[s] for s in heldout_ids)
+    uncal_seconds = statistics.mean(grade.seconds for grade in uncalibrated.values())
+    uncal_model_calls = statistics.mean(grade.model_calls for grade in uncalibrated.values())
+    calibrated_runs = [grade for grades in calibrated.values() for grade in grades]
+    cal_seconds = statistics.mean(grade.seconds for grade in calibrated_runs)
+    cal_model_calls = statistics.mean(grade.model_calls for grade in calibrated_runs)
 
     summary_rows = [
         {"setting": "uncalibrated", "model": uncalibrated[heldout_ids[0]].model, "n": len(heldout_ids),
          "mae_total": mean_abs_error(uncal_totals, teacher_totals), "mae_per_item": json.dumps(uncal_item_mae, sort_keys=True),
-         "mean_range": "n/a", "mean_stdev": "n/a", "percent_identical": "n/a"},
+         "mean_range": "n/a", "mean_stdev": "n/a", "percent_identical": "n/a",
+         "mean_seconds": uncal_seconds, "mean_model_calls": uncal_model_calls},
         {"setting": "calibrated", "model": cal_reference[heldout_ids[0]].model, "n": len(heldout_ids),
          "mae_total": mean_abs_error(cal_totals, teacher_totals), "mae_per_item": json.dumps(cal_item_mae, sort_keys=True),
          "mean_range": consistency_data["mean_range"], "mean_stdev": consistency_data["mean_stdev"],
-         "percent_identical": consistency_data["percent_identical"]},
+         "percent_identical": consistency_data["percent_identical"],
+         "mean_seconds": cal_seconds, "mean_model_calls": cal_model_calls},
     ]
-    write_csv(RESULTS / "summary.csv", summary_rows)
-    write_csv(RESULTS / "consistency.csv", [dict(script_id=script_id, **row) for script_id, row in consistency_data["per_script"].items()])
-    write_csv(RESULTS / "flagging.csv", [{**flags, "mean_error_flagged": statistics.mean(flagged_errors) if flagged_errors else "n/a",
+    write_csv(results_root / "summary.csv", summary_rows)
+    write_csv(results_root / "consistency.csv", [dict(script_id=script_id, **row) for script_id, row in consistency_data["per_script"].items()])
+    write_csv(results_root / "flagging.csv", [{**flags, "mean_error_flagged": statistics.mean(flagged_errors) if flagged_errors else "n/a",
                                             "mean_error_unflagged": statistics.mean(unflagged_errors) if unflagged_errors else "n/a",
                                             "teacher_hard_agreement": hard_agreement, "n": len(heldout_ids)}])
 
-    print("| Setting | Model | n | MAE total (marks) | MAE per item | Mean range over runs | Mean stdev | % identical |")
-    print("|---|---|---:|---:|---|---:|---:|---:|")
+    print("| Setting | Model | n | MAE total (marks) | MAE per item | Mean range over runs | Mean stdev | % identical | Mean seconds | Mean model calls |")
+    print("|---|---|---:|---:|---|---:|---:|---:|---:|---:|")
     for row in summary_rows:
-        print(f"| {row['setting'].title()} | {row['model']} | {row['n']} | {row['mae_total']:.3f} | {row['mae_per_item']} | {row['mean_range']} | {row['mean_stdev']} | {row['percent_identical']} |")
+        print(f"| {row['setting'].title()} | {row['model']} | {row['n']} | {row['mae_total']:.3f} | {row['mae_per_item']} | {row['mean_range']} | {row['mean_stdev']} | {row['percent_identical']} | {row['mean_seconds']:.2f} | {row['mean_model_calls']:.2f} |")
     print("\n| | Hard (error ≥1) | Not hard |\n|---|---:|---:|")
     print(f"| Flagged | {flags['flagged_hard']} | {flags['flagged_not_hard']} |")
     print(f"| Not flagged | {flags['unflagged_hard']} | {flags['unflagged_not_hard']} |")
@@ -185,6 +200,15 @@ def main() -> None:
           f"Flags vs teacher's hard tags agree on {hard_agreement}/{len(heldout_ids)}.")
     print(f"Settings used: temperature {config.TEMPERATURE}, backend {config.MODEL_BACKEND}, "
           f"date/time {datetime.now(timezone.utc).isoformat()}.")
+    if fake_backend:
+        try:
+            result_location = str(results_root.relative_to(ROOT))
+        except ValueError:
+            result_location = str(results_root)
+        print("\n" + "!" * 68)
+        print("FAKE BACKEND, do not report these numbers")
+        print(f"Results were isolated in {result_location}/")
+        print("!" * 68)
 
 
 if __name__ == "__main__":
