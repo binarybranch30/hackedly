@@ -5,19 +5,28 @@ Everything else calls ONE function:
     generate_json(system, prompt, image_path, schema) -> instance of `schema`
 
 The backend is chosen by MODEL_BACKEND in .env (gemini | ollama | fake).
-Callers never know which backend answered except via `last_backend_used()`.
+Callers learn which backend actually answered via `last_backend_used()`.
 """
+import json
+import mimetypes
+import time
 from pathlib import Path
 from typing import Optional, Type, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
-from copilot import config
+from copilot import audit, config
 from copilot.fake import fake_for_schema
+from copilot.schemas import AuditEntry
 
 T = TypeVar("T", bound=BaseModel)
 
 _last_backend = config.MODEL_BACKEND
+_gemini_client = None
+
+# Set to False if the go/no-go test shows Gemma 4 rejects response_json_schema;
+# the schema is then only described in the prompt (validation still happens).
+USE_API_SCHEMA = True
 
 
 class ModelError(Exception):
@@ -38,24 +47,69 @@ def model_name(backend: str) -> str:
 
 
 def generate_json(system: str, prompt: str, image_path: Optional[str | Path],
-                  schema: Type[T]) -> T:
+                  schema: Type[T], script_id: Optional[str] = None) -> T:
     """Ask the model for JSON matching `schema`, validate it, retry on errors.
 
-    TODO (Person A):
-    1. Call _call_backend(...) to get raw text.
-    2. schema.model_validate_json(raw). On ValidationError: append the error
-       message to the prompt ("Your last reply was invalid: ...; reply again
-       with ONLY valid JSON") and retry up to config.MAX_RETRIES times.
-       Log each retry to the audit log (action="retry").
-    3. On RateLimited: sleep through config.BACKOFF_SECONDS; if still limited
-       and config.AUTO_FALLBACK, switch to "ollama" (audit action="fallback").
-    4. If still invalid: raise ModelError (pipeline turns it into a flag).
+    - Invalid JSON / wrong shape: re-ask with the error message (MAX_RETRIES times).
+    - 429 rate limit: wait BACKOFF_SECONDS, then fall back to Ollama if AUTO_FALLBACK.
+    - Still failing: raise ModelError (the pipeline turns it into a flag).
     """
     global _last_backend
-    if config.MODEL_BACKEND == "fake":
+    backend = config.MODEL_BACKEND
+    if backend == "fake":
         _last_backend = "fake"
         return fake_for_schema(schema, prompt)
-    raise NotImplementedError("TODO Person A: real backends")
+
+    full_prompt = (f"{prompt}\n\nReply with ONLY a JSON object matching this JSON schema:\n"
+                   f"{json.dumps(schema.model_json_schema())}")
+    last_error = ""
+    for attempt in range(config.MAX_RETRIES + 1):
+        p = full_prompt if not last_error else (
+            f"{full_prompt}\n\nYour previous reply was invalid:\n{last_error}\n"
+            "Reply again with ONLY valid JSON that matches the schema.")
+        raw = _call_with_backoff(backend, system, p, image_path, schema, script_id)
+        if raw is None:  # rate limited and fell back
+            backend = "ollama"
+            raw = _call_backend(backend, system, p, image_path, schema)
+        try:
+            result = schema.model_validate_json(_strip_fences(raw))
+            _last_backend = backend
+            return result
+        except ValidationError as e:
+            last_error = str(e)[:1500]
+            audit.log(AuditEntry(actor="system", action="retry", script_id=script_id,
+                                 reason=f"attempt {attempt + 1}: invalid {schema.__name__}: {last_error[:300]}",
+                                 backend=backend, model=model_name(backend)))
+    raise ModelError(f"{schema.__name__} invalid after {config.MAX_RETRIES + 1} attempts: {last_error[:300]}")
+
+
+def _call_with_backoff(backend, system, prompt, image_path, schema, script_id) -> Optional[str]:
+    """Call the backend; on 429 wait and retry. Returns None if we should fall back."""
+    for wait in [*config.BACKOFF_SECONDS, None]:
+        try:
+            return _call_backend(backend, system, prompt, image_path, schema)
+        except RateLimited as e:
+            if wait is None:
+                break
+            audit.log(AuditEntry(actor="system", action="retry", script_id=script_id,
+                                 reason=f"rate limited, waiting {wait}s: {e}", backend=backend,
+                                 model=model_name(backend)))
+            time.sleep(wait)
+    if backend != "ollama" and config.AUTO_FALLBACK:
+        audit.log(AuditEntry(actor="system", action="fallback", script_id=script_id,
+                             reason="still rate limited after backoff; switching to local model",
+                             backend="ollama", model=config.OLLAMA_MODEL))
+        return None
+    raise ModelError("rate limited and no fallback available")
+
+
+def _strip_fences(raw: str) -> str:
+    """Models sometimes wrap JSON in ```json ... ``` fences."""
+    s = raw.strip()
+    if s.startswith("```"):
+        s = s.split("\n", 1)[1] if "\n" in s else s
+        s = s.rsplit("```", 1)[0]
+    return s.strip()
 
 
 def _call_backend(backend: str, system: str, prompt: str,
@@ -69,38 +123,46 @@ def _call_backend(backend: str, system: str, prompt: str,
 
 
 def _call_gemini(system, prompt, image_path, schema) -> str:
-    """TODO (Person A). Verified in docs (google-genai SDK):
-        from google import genai
-        from google.genai import types
-        client = genai.Client(api_key=config.GEMINI_API_KEY)
-        image = client.files.upload(file=image_path)   # or types.Part.from_bytes(...)
-        resp = client.models.generate_content(
-            model=config.GEMINI_MODEL,
-            contents=[image, prompt],
-            config=types.GenerateContentConfig(
-                system_instruction=system,
-                temperature=config.TEMPERATURE,
-                response_mime_type="application/json",
-                response_json_schema=schema.model_json_schema(),  # NOT confirmed for Gemma 4: test it!
-            ),
-        )
-        return resp.text
-    If the schema config is rejected, drop those two lines and paste the
-    schema into the prompt instead. Raise RateLimited on 429.
-    """
-    raise NotImplementedError
+    global _gemini_client
+    from google import genai
+    from google.genai import errors, types
+
+    if _gemini_client is None:
+        if not config.GEMINI_API_KEY:
+            raise ModelError("GEMINI_API_KEY is not set in .env")
+        _gemini_client = genai.Client(api_key=config.GEMINI_API_KEY)
+
+    contents = []
+    if image_path:
+        mime = mimetypes.guess_type(str(image_path))[0] or "image/jpeg"
+        contents.append(types.Part.from_bytes(data=Path(image_path).read_bytes(), mime_type=mime))
+    contents.append(prompt)
+
+    cfg = dict(system_instruction=system, temperature=config.TEMPERATURE)
+    if USE_API_SCHEMA:
+        cfg.update(response_mime_type="application/json",
+                   response_json_schema=schema.model_json_schema())
+    try:
+        resp = _gemini_client.models.generate_content(
+            model=config.GEMINI_MODEL, contents=contents,
+            config=types.GenerateContentConfig(**cfg))
+    except errors.APIError as e:
+        if e.code == 429:
+            raise RateLimited(str(e)[:200]) from e
+        raise
+    return resp.text or ""
 
 
 def _call_ollama(system, prompt, image_path, schema) -> str:
-    """TODO (Person A). Verified in docs (ollama Python library):
-        from ollama import Client
-        resp = Client(host=config.OLLAMA_URL).chat(
-            model=config.OLLAMA_MODEL,
-            messages=[{"role": "system", "content": system},
-                      {"role": "user", "content": prompt, "images": [str(image_path)]}],
-            format=schema.model_json_schema(),
-            options={"temperature": config.TEMPERATURE},
-        )
-        return resp.message.content
-    """
-    raise NotImplementedError
+    from ollama import Client
+
+    user = {"role": "user", "content": prompt}
+    if image_path:
+        user["images"] = [str(image_path)]
+    resp = Client(host=config.OLLAMA_URL).chat(
+        model=config.OLLAMA_MODEL,
+        messages=[{"role": "system", "content": system}, user],
+        format=schema.model_json_schema(),
+        options={"temperature": config.TEMPERATURE},
+    )
+    return resp.message.content
