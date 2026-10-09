@@ -183,19 +183,21 @@ with tab_review:
             if grade.status in ("approved", "released"):
                 st.info("🔒 Approved scripts are locked.")
                 continue
-            item_by_id = {item.item_id: item for item in rubric.items}
+            grade_item_by_id = {item.item_id: item for item in grade.items}
             edits = {}
-            for item in grade.items:
-                rubric_item = item_by_id.get(item.item_id)
-                if not rubric_item:
-                    continue
+            for rubric_item in rubric.items:
+                item = grade_item_by_id.get(rubric_item.item_id)
                 cols = st.columns([1, 1, 4, 1, 1])
-                cols[0].write(item.item_id)
-                edits[item.item_id] = cols[1].number_input("Marks", min_value=min(rubric_item.allowed_marks), max_value=max(rubric_item.allowed_marks), value=item.final_marks, step=1, key=f"review-{grade.script_id}-{item.item_id}")
-                cols[2].write(item.reasoning)
-                cols[3].write(item.confidence)
-                cols[4].write("✅" if item.evidence_found else "❌")
-            invalid = [item_id for item_id, mark in edits.items() if mark not in item_by_id[item_id].allowed_marks]
+                cols[0].write(rubric_item.item_id)
+                edits[rubric_item.item_id] = cols[1].number_input(
+                    "Marks", min_value=min(rubric_item.allowed_marks), max_value=max(rubric_item.allowed_marks),
+                    value=item.final_marks if item else 0, step=1,
+                    key=f"review-{grade.script_id}-{rubric_item.item_id}")
+                cols[2].write(item.reasoning if item else "No model score — mark manually.")
+                cols[3].write(item.confidence if item else "—")
+                cols[4].write("✅" if item and item.evidence_found else "❌")
+            invalid = [item_id for item_id, mark in edits.items()
+                       if mark not in next(item.allowed_marks for item in rubric.items if item.item_id == item_id)]
             if invalid:
                 st.error(f"Use an allowed mark for: {', '.join(invalid)}")
             if st.button("Approve", key=f"approve-{grade.script_id}", disabled=bool(invalid)):
