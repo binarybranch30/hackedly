@@ -1,11 +1,17 @@
 import streamlit as st
 
+from ui import components as c
 from ui import theme
-from ui.sections import audit, evaluation
+from ui.sections import audit, class_report, evaluation
 
-theme.page_header("Insights", "How reliable is the grading, and what exactly happened. Measured, not claimed.")
+theme.page_header("Insights", "What the class struggled with, how reliable the grading is, and exactly what "
+                  "happened.", eyebrow=c.workspace_label())
 
-t1, t2 = st.tabs([":material/monitoring: Evaluation", ":material/history: Audit log"])
+t0, t1, t2 = st.tabs([":material/school: Class insights", ":material/monitoring: Evaluation",
+                      ":material/history: Audit log"])
+with t0:
+    with st.container(border=True):
+        class_report.render()
 with t1:
     evaluation.render()
 with t2:

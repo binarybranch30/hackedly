@@ -37,8 +37,32 @@ class ModelError(Exception):
 
 
 class RateLimited(Exception):
-    """Raised by a backend on temporary overload: HTTP 429 (rate limit) or
+    """Raised by a backend on temporary overload: HTTP 429 (quota per minute) or
     500/503/504 (e.g. "model is experiencing high demand"). We back off and retry."""
+
+    def __init__(self, message: str, code: int = 503):
+        super().__init__(message)
+        self.code = code
+
+
+_rate_lock = threading.Lock()
+_recent_calls: list[float] = []
+
+
+def _rate_gate() -> None:
+    """Keep Gemini calls under config.GEMINI_RPM per minute across all grading threads,
+    so a big class does not burst into the per-minute quota (HTTP 429)."""
+    if config.GEMINI_RPM <= 0:
+        return
+    while True:
+        with _rate_lock:
+            now = time.monotonic()
+            _recent_calls[:] = [t for t in _recent_calls if now - t < 60]
+            if len(_recent_calls) < config.GEMINI_RPM:
+                _recent_calls.append(now)
+                return
+            wait = 60 - (now - _recent_calls[0]) + 0.05
+        time.sleep(wait)
 
 
 def last_backend_used() -> str:
@@ -103,12 +127,17 @@ def _call_with_backoff(backend, system, prompt, image_path, schema, script_id) -
     """Call the backend; on overload wait and retry, then move down the fallback
     chain. Returns (raw_text, backend_that_answered)."""
     while True:
-        for wait in [*config.BACKOFF_SECONDS, None]:
+        waits, attempt = None, 0
+        while True:
             try:
                 return _call_backend(backend, system, prompt, image_path, schema), backend
             except RateLimited as e:
-                if wait is None:
+                if waits is None:  # quota errors (429) clear within a minute: wait longer, same model
+                    waits = config.QUOTA_BACKOFF_SECONDS if e.code == 429 else config.BACKOFF_SECONDS
+                if attempt >= len(waits):
                     break
+                wait = waits[attempt]
+                attempt += 1
                 audit.log(AuditEntry(actor="system", action="retry", script_id=script_id,
                                      reason=f"temporarily unavailable, waiting {wait}s: {e}",
                                      backend=backend, model=model_name(backend)))
@@ -196,6 +225,7 @@ def _call_gemini(system, prompt, image_path, schema, model: str) -> str:
     contents = []
     if image_path:
         contents.append(types.Part.from_bytes(data=prepare_image(image_path), mime_type="image/jpeg"))
+    _rate_gate()
     contents.append(prompt)
 
     cfg = dict(system_instruction=system, temperature=config.TEMPERATURE)
@@ -205,12 +235,20 @@ def _call_gemini(system, prompt, image_path, schema, model: str) -> str:
         cfg.update(response_mime_type="application/json",
                    response_json_schema=schema.model_json_schema())
     try:
-        resp = _gemini_client.models.generate_content(
-            model=model, contents=contents,
-            config=types.GenerateContentConfig(**cfg))
+        try:
+            resp = _gemini_client.models.generate_content(
+                model=model, contents=contents, config=types.GenerateContentConfig(**cfg))
+        except errors.APIError as e:
+            # Constrained decoding can hang on some schemas (seen with minItems/maxItems):
+            # retry once with the schema only in the prompt; Pydantic still validates.
+            if e.code != 504 or "response_json_schema" not in cfg:
+                raise
+            cfg.pop("response_json_schema")
+            resp = _gemini_client.models.generate_content(
+                model=model, contents=contents, config=types.GenerateContentConfig(**cfg))
     except errors.APIError as e:
         if e.code in (429, 500, 503, 504):
-            raise RateLimited(f"{e.code}: {str(e)[:160]}") from e
+            raise RateLimited(f"{e.code}: {str(e)[:160]}", code=e.code) from e
         raise
     return resp.text or ""
 

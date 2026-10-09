@@ -46,6 +46,19 @@ def fake_for_schema(schema, prompt: str):
                        allowed_marks=[0, 1, 2], guidance=""),
             RubricItem(item_id="1b", description="Gives the word equation", max_marks=2,
                        allowed_marks=[0, 1, 2], guidance="")])
+    if schema.__name__ == "ClassInsights":
+        ids = re.findall(r"\[item_id=([^\]]+)\]", prompt) or ["1"]
+        return schema.model_validate({
+            "items": [{"item_id": i, "common_mistake": "Fake: states the formula but does not explain it."}
+                      for i in ids],
+            "struggled_concept": "Fake: linking the example back to F = ma",
+            "reteach_topics": ["Fake: what each symbol in F = ma means", "Fake: worked everyday examples"],
+            "summary": "Fake summary for UI testing."})
+    if schema.__name__ == "FeedbackDraft":
+        m = re.search(r"The student's answer:\n(.{0,40}\w)", prompt, re.S)
+        q = m.group(1).split("\n")[0][:30] if m else ""
+        return schema.model_validate({"feedback": f'Fake: you wrote "{q}", which is a good start. '
+                                                  "Next time explain each quantity.", "quotes": [q] if q else []})
     if schema is ItemScores:
         ids = re.findall(r"\[item_id=([^\]]+)\]", prompt) or ["1"]
         return fake_item_scores(ids, prompt[:50])

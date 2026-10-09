@@ -3,6 +3,7 @@ import streamlit as st
 from copilot import config, pipeline, store
 from copilot.schemas import Script
 from ui import board
+from ui.sections import class_report
 from ui import components as c
 from ui import theme
 
@@ -48,17 +49,23 @@ with st.container(border=True):
 
     up_col, opt_col = st.columns([3, 2], gap="large")
     with up_col:
-        uploads = st.file_uploader("Add answer sheets: photos or PDFs, one student per file. Name files by roll "
-                                   "number (R07.pdf) or match them to students below.",
+        uploads = st.file_uploader("Add answer sheets: photos or PDFs, one student per file. Name them "
+                                   "“R07 Asha Rao.pdf” and the student is added to the class list "
+                                   "automatically; other names can be matched below.",
                                    type=["jpg", "jpeg", "png", "pdf"], accept_multiple_files=True,
                                    key=f"sheets_up_{st.session_state.get('sheets_up_n', 0)}")
         if uploads and st.button(f"Add {len(uploads)} file(s)", icon=":material/add:"):
             st.session_state["sheets_up_n"] = st.session_state.get("sheets_up_n", 0) + 1  # empties the box
+            new_students = []
             for up in uploads:
-                sid = c.script_id_from_name(up.name)
+                parsed = store.parse_sheet_filename(up.name)   # "R07 Asha Rao.pdf" -> ("R07", "Asha Rao")
+                sid = parsed[0] if parsed else c.script_id_from_name(up.name)
+                if parsed:
+                    new_students.append(parsed)
                 c.save_upload(up, c.scripts_dir(), sid)
                 pipeline.reopen_for_new_scan(sid)  # a new scan replaces one marked "needs rescan"
-            c.flash(f"Added {len(uploads)} file(s).")
+            added = store.add_students(new_students)
+            c.flash(f"Added {len(uploads)} file(s)" + (f"; {added} student(s) added to the class list." if added else "."))
             st.rerun()
     with opt_col:
         calibrated = st.toggle("Calibrate with my anchor scripts", value=bool(anchors), disabled=not anchors,
@@ -138,6 +145,8 @@ if run and run.get("ws", str(config.workspace())) == str(config.workspace()):
         b.page_link("views/review.py", label="Review now", icon=":material/arrow_forward:")
     st.markdown(board.render(run["ids"], run["state"], results, {i: c.student_label(i) for i in run["ids"]}),
                 unsafe_allow_html=True)
+    with st.container(border=True):
+        class_report.render(compact=True)
     for d in run["drift"]:
         if d.get("drifted"):
             st.warning(f"Drift check: anchor {d['anchor_id']} got {d['system_total']} from the system, "

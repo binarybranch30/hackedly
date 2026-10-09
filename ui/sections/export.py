@@ -21,6 +21,22 @@ def render() -> None:
     if "export_csv" in st.session_state:
         st.download_button("Download marks.csv", st.session_state["export_csv"], "marks.csv", "text/csv",
                            icon=":material/download:", width="stretch")
+    no_fb = [g for g in approved if g.feedback_status == "none" and g.transcription and g.transcription.text]
+    if no_fb and st.button(f"Draft feedback for {len(no_fb)} approved sheet(s)", icon=":material/auto_awesome:",
+                           width="stretch"):
+        rubric = store.load_rubric()
+        bar = st.progress(0.0)
+        for n, g in enumerate(no_fb, 1):
+            try:
+                pipeline.draft_feedback(g.script_id, rubric)
+            except Exception as e:  # noqa: BLE001
+                st.caption(f"{g.script_id}: {e}")
+            bar.progress(n / len(no_fb))
+        st.rerun()
+    drafts = sum(g.feedback_status == "draft" for g in grades)
+    if drafts:
+        st.caption(f"{drafts} feedback draft(s) waiting for your approval in Review. "
+                   "Only approved feedback is exported.")
     flagged = [g for g in grades if g.flags]
     if flagged:
         rows = "script_id,total,max_total,status,flags\n" + "".join(
