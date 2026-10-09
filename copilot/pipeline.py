@@ -18,7 +18,7 @@ from PIL import Image
 from copilot import audit, config, models, prompts, rules, store
 from copilot.fake import fake_script_grade
 from copilot.schemas import (FLAG_FALLBACK_USED, FLAG_MODEL_ERROR, FLAG_RUNS_DISAGREE,
-                             FLAG_UNREADABLE, AnchorGrade, AuditEntry, ItemScores, Rubric,
+                             FLAG_UNREADABLE, AnchorGrade, AuditEntry, GradedItem, ItemScores, Rubric,
                              Script, ScriptGrade, Transcription)
 
 DRIFT_EVERY = 5        # run a drift check after every N scripts in a batch
@@ -235,6 +235,13 @@ def approve(script_id: str, edits: dict[str, int], teacher: str = "teacher") -> 
     for item_id, m in edits.items():
         if item_id in allowed and m not in allowed[item_id]:
             raise ValueError(f"{item_id}: {m} is not an allowed mark {allowed[item_id]}")
+    # Unreadable / failed scripts have no model items: the teacher marks them by hand.
+    have = {i.item_id for i in grade.items}
+    for item_id in edits:
+        if item_id in allowed and item_id not in have:
+            grade.items.append(GradedItem(item_id=item_id, marks_awarded=0, evidence_quote="",
+                                          reasoning="Marked by teacher (no model score).",
+                                          confidence="low", evidence_found=False, final_marks=0))
     for item in grade.items:
         if item.item_id in edits and edits[item.item_id] != item.final_marks:
             audit.log(AuditEntry(actor="teacher", action="edit", script_id=script_id,
