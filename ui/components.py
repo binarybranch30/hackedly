@@ -19,8 +19,9 @@ def anchors_dir() -> Path:
 
 
 STATUS_LABEL = {"needs_review": "Needs review", "auto_ok": "Auto-OK",
-                "approved": "Approved", "released": "Released"}
-STATUS_BADGE = {"needs_review": "orange", "auto_ok": "blue", "approved": "green", "released": "violet"}
+                "approved": "Approved", "released": "Released", "rescan": "Needs rescan"}
+STATUS_BADGE = {"needs_review": "orange", "auto_ok": "blue", "approved": "green", "released": "violet",
+                "rescan": "red"}
 FLAG_HELP = {
     "UNREADABLE": "The photo or handwriting could not be read.",
     "LOW_CONFIDENCE": "The model said it was unsure about at least one item.",
@@ -124,14 +125,20 @@ def set_theme(mode: str) -> None:
     </script>""", height=0)
 
 
+def theme_button() -> None:
+    """Sun/moon button pinned to the top-right corner (CSS: .st-key-ag_theme_btn)."""
+    dark = theme.is_dark()
+    with st.container(key="ag_theme_btn"):
+        if st.button("", icon=":material/light_mode:" if dark else ":material/dark_mode:", type="tertiary",
+                     help="Switch to light mode" if dark else "Switch to dark mode"):
+            set_theme("Light" if dark else "Dark")
+
+
 def sidebar_status() -> None:
     """Compact sidebar footer: sample-class switch + which model is grading."""
     from copilot import sample  # local import: only the website needs it
 
     with st.sidebar:
-        dark = st.toggle("Dark mode", value=theme.is_dark(), key="dark_mode")
-        if dark != theme.is_dark():
-            set_theme("Dark" if dark else "Light")
         on = st.toggle("Sample class", value=config.sample_mode(),
                        help="A prepared class (rubric, 3 graded anchors, 8 answer-sheet PDFs) for demos. "
                             "The sheets are graded live. Your own data is kept separately.")

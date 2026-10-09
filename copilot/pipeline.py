@@ -7,6 +7,7 @@ Functions for the UI / eval:
   drift_check(rubric, anchors, index) -> dict         re-grade one anchor
   extract_rubric(image_path) -> (Rubric, problems)    draft rubric from a question-paper photo
   approve(script_id, edits) / export_csv(path)        teacher approval + release
+  mark_unreadable / undo_unreadable / reopen_for_new_scan   "cannot mark, needs rescan"
 """
 import csv
 import time
@@ -300,6 +301,43 @@ def approve(script_id: str, edits: dict[str, int], teacher: str = "teacher") -> 
     audit.log(AuditEntry(actor="teacher", action="approve", script_id=script_id,
                          after=str(grade.total), reason=teacher))
     return grade
+
+
+RESCAN_REASONS = ["Too blurry to read", "Page cut off or missing", "Handwriting illegible",
+                  "Wrong sheet or not an answer"]
+
+
+def mark_unreadable(script_id: str, reason: str, teacher: str = "teacher") -> ScriptGrade:
+    """Teacher says this sheet cannot be marked as scanned. It goes to the rescan
+    list and is never released until a new scan is graded."""
+    grade = next(g for g in store.load_grades() if g.script_id == script_id)
+    before = grade.status
+    grade.status, grade.teacher_note = "rescan", reason.strip() or "Cannot be marked"
+    store.save_grade(grade)
+    audit.log(AuditEntry(actor="teacher", action="flag", script_id=script_id, before=before,
+                         after="rescan", reason=f"{teacher}: {grade.teacher_note}"))
+    return grade
+
+
+def undo_unreadable(script_id: str, teacher: str = "teacher") -> ScriptGrade:
+    grade = next(g for g in store.load_grades() if g.script_id == script_id)
+    grade.status, grade.teacher_note = "needs_review", ""
+    store.save_grade(grade)
+    audit.log(AuditEntry(actor="teacher", action="edit", script_id=script_id, before="rescan",
+                         after="needs_review", reason=f"{teacher}: undo 'cannot mark'"))
+    return grade
+
+
+def reopen_for_new_scan(script_id: str) -> bool:
+    """A new scan was uploaded for a sheet marked 'rescan': drop the old result so
+    the new file is graded. Returns True if something was reopened."""
+    old = next((g for g in store.load_grades() if g.script_id == script_id), None)
+    if old is None or old.status != "rescan":
+        return False
+    (store.grades_dir() / f"{script_id}.json").unlink(missing_ok=True)
+    audit.log(AuditEntry(actor="teacher", action="edit", script_id=script_id, before="rescan",
+                         after="queued", reason="new scan uploaded"))
+    return True
 
 
 def export_csv(path: str | Path) -> int:

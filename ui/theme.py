@@ -48,6 +48,13 @@ _CSS = """
 [data-testid="stSidebarNav"] a[aria-current="page"] span { color: var(--ag-ink-text) !important; font-weight: 600; }
 [data-testid="stSidebarNav"] a:hover:not([aria-current="page"]) { background: var(--ag-hover); }
 
+/* Theme switch pinned top-right, next to Streamlit's menu */
+.st-key-ag_theme_btn { position: fixed; top: .5rem; right: 3.4rem; z-index: 1000001; width: auto !important; }
+.st-key-ag_theme_btn button { border-radius: 999px; width: 2.4rem; height: 2.4rem; min-height: 0;
+  background: var(--ag-card); border: 1px solid var(--ag-border); box-shadow: 0 2px 8px var(--ag-shadow); }
+.st-key-ag_theme_btn button:hover { border-color: var(--ag-primary); color: var(--ag-primary); }
+.st-key-ag_theme_btn iframe { position: absolute; }
+
 /* Bordered containers become white cards */
 [data-testid="stVerticalBlockBorderWrapper"] { background: var(--ag-card); border-radius: 1rem; }
 

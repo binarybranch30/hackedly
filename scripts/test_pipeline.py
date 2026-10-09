@@ -142,4 +142,16 @@ assert h == 2 * round(w * 1000 / 800), (w, h)  # two pages stacked
 g = pipeline.grade_script(Script(script_id="PDF1", image_path=str(pdf)), rubric, [])
 assert g.total == 4 and not g.flags, g.flags
 print("pdf OK")
+
+# Teacher: "cannot mark this sheet" -> rescan list, never released, undo works, new scan reopens it
+g = pipeline.mark_unreadable("E1", "Too blurry to read")
+assert g.status == "rescan" and g.teacher_note == "Too blurry to read"
+out = tmp / "marks.csv"
+pipeline.export_csv(out)
+assert "E1" not in out.read_text(), "rescan sheets must not be released"
+assert pipeline.undo_unreadable("E1").status == "needs_review"
+pipeline.mark_unreadable("E1", "")
+assert pipeline.reopen_for_new_scan("E1") and not any(x.script_id == "E1" for x in store.load_grades())
+assert not pipeline.reopen_for_new_scan("clean"), "only rescan sheets are reopened"
+print("rescan OK")
 print("ALL PIPELINE TESTS PASSED")

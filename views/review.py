@@ -16,7 +16,7 @@ if not grades:
     st.stop()
 
 FILTERS = {"Needs review": ["needs_review"], "Auto-OK": ["auto_ok"],
-           "Approved": ["approved", "released"], "All": None}
+           "Approved": ["approved", "released"], "Rescan": ["rescan"], "All": None}
 counts = {k: sum(1 for g in grades if v is None or g.status in v) for k, v in FILTERS.items()}
 
 top_l, top_r = st.columns([4, 1], vertical_alignment="bottom")
@@ -52,7 +52,7 @@ if n3.button("", icon=":material/chevron_right:", disabled=idx == len(ids) - 1, 
     st.rerun()
 
 g = by_id[st.session_state["review_pick"]]
-locked = g.status in ("approved", "released")
+locked = g.status in ("approved", "released", "rescan")
 items = {i.item_id: i for i in g.items}
 
 photo_col, work_col = st.columns([2, 3], gap="large")
@@ -73,6 +73,30 @@ with work_col:
         c.flag_badges(g.flags)
     if "FALLBACK_USED" in g.flags:
         st.caption(f"The main model was overloaded; graded with {g.model}.")
+
+    if g.status == "rescan":
+        with st.container(border=True):
+            st.markdown(f":red[:material/visibility_off:] **You marked this sheet as not markable**  \n"
+                        f"{g.teacher_note}. It is on the rescan list and will not be released. "
+                        "Upload a new scan with the same name on the Grade page to grade it again.")
+            if st.button("Undo", icon=":material/undo:"):
+                pipeline.undo_unreadable(g.script_id)
+                c.flash(f"{g.script_id} is back in review.", "info")
+                st.rerun()
+    elif g.status != "released":
+        with st.popover("Can't mark this sheet", icon=":material/visibility_off:"):
+            st.markdown("**Why can't it be marked?**")
+            reason = st.radio("Reason", pipeline.RESCAN_REASONS + ["Other"], label_visibility="collapsed",
+                              key=f"why-{g.script_id}")
+            note = st.text_input("Note (optional)", key=f"note-{g.script_id}",
+                                 placeholder="e.g. bottom half of page 2 is missing")
+            st.caption("The sheet goes to the rescan list and is kept out of the released marks.")
+            if st.button("Send to rescan list", type="primary", icon=":material/visibility_off:",
+                         width="stretch", key=f"rescan-{g.script_id}"):
+                text = note.strip() if reason == "Other" else reason + (f" — {note.strip()}" if note.strip() else "")
+                pipeline.mark_unreadable(g.script_id, text)
+                c.flash(f"{g.script_id} moved to the rescan list.", "warning")
+                st.rerun()
 
     with st.container(border=True):
         st.caption("WHAT GEMMA 4 READ  ·  highlighted = evidence used for marks")
@@ -110,7 +134,9 @@ with work_col:
     f1.markdown(f"### Total {new_total}/{rubric.max_total}"
                 + (f" <span style='font-size:.9rem;color:#7E7E7E'>(was {g.total})</span>"
                    if new_total != g.total else ""), unsafe_allow_html=True)
-    if locked:
+    if g.status == "rescan":
+        f2.button("Needs rescan", icon=":material/visibility_off:", disabled=True, width="stretch")
+    elif locked:
         f2.button("Approved", icon=":material/lock:", disabled=True, width="stretch")
     else:
         with f2:

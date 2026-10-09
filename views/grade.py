@@ -33,7 +33,9 @@ with st.container(border=True):
                                    type=["jpg", "jpeg", "png", "pdf"], accept_multiple_files=True)
         if uploads and st.button("Add to queue", icon=":material/add:"):
             for up in uploads:
-                c.save_upload(up, c.scripts_dir(), c.script_id_from_name(up.name))
+                sid = c.script_id_from_name(up.name)
+                c.save_upload(up, c.scripts_dir(), sid)
+                pipeline.reopen_for_new_scan(sid)  # a new scan replaces one marked "needs rescan"
             st.rerun()
         calibrated = st.toggle("Use my anchor scripts to calibrate", value=bool(anchors), disabled=not anchors,
                                help="Puts your 3 graded anchors in the prompt so the model marks like you.")
