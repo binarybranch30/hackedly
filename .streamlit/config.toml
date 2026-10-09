@@ -1,18 +1,25 @@
-# Two palettes; the sidebar "Dark mode" switch picks one (Streamlit's own light/dark themes).
+# Look: warm off-white canvas, deep navy text, teal accent; Bricolage Grotesque headings,
+# Plus Jakarta Sans body. The sidebar "Dark mode" switch picks the dark palette.
 [theme]
-primaryColor = "#1E33F2"
+font = "Plus Jakarta Sans:https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap, sans-serif"
+headingFont = "Bricolage Grotesque:https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&display=swap, sans-serif"
+headingFontWeights = [800, 700, 700, 600, 600, 600]
+baseRadius = "0.7rem"
+primaryColor = "#0E7C66"
 
 [theme.light]
-primaryColor = "#1E33F2"
-backgroundColor = "#F5F6FA"
+primaryColor = "#0E7C66"
+backgroundColor = "#F6F7F4"
 secondaryBackgroundColor = "#FFFFFF"
-textColor = "#24292D"
+textColor = "#0F1B2D"
+borderColor = "#E4E6E0"
 
 [theme.dark]
-primaryColor = "#5B6CFF"
-backgroundColor = "#0E1220"
-secondaryBackgroundColor = "#171C2E"
-textColor = "#E6E8EF"
+primaryColor = "#2BB394"
+backgroundColor = "#0B1422"
+secondaryBackgroundColor = "#13213A"
+textColor = "#EEF2F6"
+borderColor = "#22314B"
 
 [client]
 toolbarMode = "viewer"      # hide the developer "Deploy" menu

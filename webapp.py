@@ -22,6 +22,8 @@ pages = [
 page = st.navigation(pages)
 components.sidebar_status()
 if config.sample_mode():
-    st.info("**Sample class** — prepared rubric, 3 teacher-graded anchors and 8 answer sheets. "
-            "Grading runs live with Gemma 4.", icon=":material/school:")
+    st.markdown("<div style='background:var(--ag-primary-soft);color:var(--ag-primary);border-radius:.8rem;"
+                "padding:.55rem 1rem;font-size:.88rem;margin-bottom:1rem'><b>Sample class</b> · prepared rubric, "
+                "3 teacher-graded anchors and 8 answer sheets. Grading runs live with Gemma 4.</div>",
+                unsafe_allow_html=True)
 page.run()
