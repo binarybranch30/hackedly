@@ -3,6 +3,8 @@
 Run:  streamlit run webapp.py
 Pages live in views/. Shared look in ui/theme.py, helpers in ui/components.py.
 """
+import os
+
 import streamlit as st
 
 from copilot import config
@@ -19,6 +21,14 @@ pages = [
     st.Page("views/review.py", title="Review", icon=":material/fact_check:"),
     st.Page("views/insights.py", title="Insights", icon=":material/insights:"),
 ]
+# Public demo: a fresh deployment with no data of its own opens on the sample class.
+if os.getenv("HACKEDLY_DEMO", "").lower() in ("1", "true") and not config.sample_mode() \
+        and not config.active_assessment() and "demo_init" not in st.session_state:
+    from copilot import assessments, sample
+    if not assessments.list_all():
+        sample.enable()
+    st.session_state["demo_init"] = True
+
 page = st.navigation(pages)
 components.theme_button()
 components.sidebar_status()
