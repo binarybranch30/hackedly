@@ -102,7 +102,10 @@ Confidence is `high/medium/low` rather than a number, because numbers that LLMs 
 | `models.generate_json(system, prompt, image_path, schema) -> schema` | pipeline only |
 | `rules.apply(rubric, scores, transcription) -> (items, total, flags)` | pipeline only |
 | `pipeline.grade_script(script, rubric, anchors, calibrated) -> ScriptGrade` | UI, eval |
-| `pipeline.approve(script_id, edits)` / `pipeline.export_csv(path)` | UI |
+| `pipeline.grade_batch(scripts, rubric, anchors, calibrated, on_progress) -> (grades, drift)` | UI (Grade page) |
+| `pipeline.transcribe_image(path) -> Transcription` | UI (pre-fills the Anchors form) |
+| `pipeline.drift_check(rubric, anchors, index) -> dict` | grade_batch every 5 scripts; UI may call it |
+| `pipeline.approve(script_id, edits)` (rejects marks not in `allowed_marks`) / `pipeline.export_csv(path)` | UI |
 | `store.*`, `audit.log/read_all` | anyone |
 
 ## 6. Switching the model
