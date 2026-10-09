@@ -224,7 +224,7 @@ if page == "Review":
             with image_col:
                 image_path = saved_image(grade.script_id, "scripts")
                 if image_path:
-                    st.image(str(image_path), caption=grade.script_id, use_container_width=True)
+                    st.image(str(image_path), caption=grade.script_id, width="stretch")
                 else:
                     st.caption("No saved image for this script.")
             with text_col:
@@ -267,4 +267,4 @@ if page == "Audit log":
     entries = list(reversed(audit.read_all()))
     if script_filter:
         entries = [entry for entry in entries if entry.script_id == script_filter]
-    st.dataframe([entry.model_dump() for entry in entries], use_container_width=True)
+    st.dataframe([entry.model_dump() for entry in entries], width="stretch")
