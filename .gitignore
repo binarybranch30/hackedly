@@ -10,3 +10,7 @@ eval/results/raw/
 *.log
 .streamlit/secrets.toml
 data/grades/
+data/sample/
+data/.sample_mode
+data/question_papers/
+data/backups/

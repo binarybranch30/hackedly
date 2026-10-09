@@ -8,8 +8,15 @@ from copilot.schemas import ScriptGrade
 from ui import theme
 
 IMAGE_EXTS = (".jpg", ".jpeg", ".png")
-SCRIPTS_DIR = config.DATA_DIR / "scripts"
-ANCHORS_DIR = config.DATA_DIR / "anchors"
+
+
+def scripts_dir() -> Path:
+    return config.workspace() / "scripts"
+
+
+def anchors_dir() -> Path:
+    return config.workspace() / "anchors"
+
 
 STATUS_LABEL = {"needs_review": "Needs review", "auto_ok": "Auto-OK",
                 "approved": "Approved", "released": "Released"}
@@ -25,7 +32,8 @@ FLAG_HELP = {
 }
 
 
-def find_image(script_id: str, folder: Path = SCRIPTS_DIR) -> Path | None:
+def find_image(script_id: str, folder: Path | None = None) -> Path | None:
+    folder = folder or scripts_dir()
     for ext in IMAGE_EXTS:
         p = folder / f"{script_id}{ext}"
         if p.exists():
@@ -85,8 +93,22 @@ def show_flash() -> None:
 
 
 def sidebar_status() -> None:
-    """Backend card at the bottom of the sidebar."""
+    """Sample-mode switch and backend card at the bottom of the sidebar."""
+    from copilot import sample  # local import: only the website needs it
+
     with st.sidebar:
+        on = st.toggle("Sample class (demo)", value=config.sample_mode(),
+                       help="Switch to a prepared class that shows every part of the workflow. "
+                            "Your real data is kept separately and comes back when you switch off.")
+        if on != config.sample_mode():
+            with st.spinner("Preparing the sample class…"):
+                sample.enable() if on else sample.disable()
+            st.rerun()
+        if on and st.button("Reset sample class", icon=":material/restart_alt:", width="stretch"):
+            with st.spinner("Rebuilding…"):
+                sample.build()
+            st.rerun()
+        st.divider()
         backend = config.MODEL_BACKEND
         st.caption("MODEL BACKEND")
         st.markdown(f"**{models.model_name(backend)}**  \n`{backend}`")
@@ -104,7 +126,7 @@ def drift_entries(limit: int = 5):
 
 
 def setup_status() -> dict:
-    rubric_saved = store.RUBRIC_PATH.exists()
+    rubric_saved = store.rubric_path().exists()
     anchors = store.load_anchors()
     return {"rubric_saved": rubric_saved, "n_anchors": len(anchors),
             "n_grades": len(store.load_grades())}

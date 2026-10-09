@@ -13,8 +13,10 @@ from PIL import Image  # noqa: E402
 from copilot import config, models, pipeline, store  # noqa: E402
 from copilot.schemas import AnchorGrade, Script  # noqa: E402
 
-config.MODEL_BACKEND = "gemini"
+config.MODEL_BACKEND = "gemini"   # tests never call the network: _call_backend is replaced
 config.BACKOFF_SECONDS = [0]
+config.AUTO_FALLBACK = True
+config.PARALLEL_SCRIPTS = 1        # the reply queue below assumes one script at a time
 rubric = store.load_rubric()
 tmp = Path(tempfile.mkdtemp())
 img = tmp / "ok.png"
@@ -38,7 +40,7 @@ def fake_backend(replies):
     q = list(replies)
 
     def call(backend, system, prompt, image_path, schema):
-        models._call_count += 1
+        models._local.calls = models.call_count() + 1
         r = q.pop(0)
         if isinstance(r, Exception):
             raise r
@@ -107,4 +109,19 @@ draft, problems = pipeline.extract_rubric(str(img))
 print("rubric problems:", problems)
 assert len(draft.items) == 2 and "duplicate item ids" in problems and len(problems) >= 4
 assert pipeline.check_rubric(rubric) == [], "example rubric should be valid"
+
+# Parallel batch: 6 scripts on 3 threads with a stateless, schema-aware mock
+config.PARALLEL_SCRIPTS = 3
+
+
+def by_schema(backend, system, prompt, image_path, schema):
+    models._local.calls = models.call_count() + 1
+    return T_OK if schema.__name__ == "Transcription" else scores(2)
+
+
+models._call_backend = by_schema
+grades, _ = pipeline.grade_batch([Script(script_id=f"P{i}", image_path=str(img)) for i in range(6)], rubric, [])
+assert [g.script_id for g in grades] == [f"P{i}" for i in range(6)], "results keep input order"
+assert all(g.total == 4 and g.model_calls == 3 for g in grades), [(g.total, g.model_calls) for g in grades]
+print("parallel batch OK")
 print("ALL PIPELINE TESTS PASSED")

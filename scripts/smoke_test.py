@@ -11,6 +11,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from copilot import audit, config, pipeline, store  # noqa: E402
 from copilot.schemas import Script  # noqa: E402
 
+config.MODEL_BACKEND = "fake"  # quick offline check; never calls the real model
+
 rubric = store.load_rubric()
 grade = pipeline.grade_script(Script(script_id="SMOKE", image_path="none.jpg"), rubric, [])
 print(grade.model_dump_json(indent=2))

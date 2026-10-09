@@ -23,7 +23,7 @@ print(f"Backend: {config.MODEL_BACKEND} / {models.model_name(config.MODEL_BACKEN
 
 # Does the API accept response_json_schema for this model?
 try:
-    models._call_backend(config.MODEL_BACKEND, "Reply in JSON.", "Say hello.", None, Transcription)
+    models._call_with_backoff(config.MODEL_BACKEND, "Reply in JSON.", "Say hello.", None, Transcription, None)
     print("JSON schema setting: ACCEPTED")
 except Exception as e:  # noqa: BLE001
     print(f"JSON schema setting: REJECTED ({type(e).__name__}: {str(e)[:200]})")

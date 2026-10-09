@@ -1,6 +1,6 @@
 import streamlit as st
 
-from copilot import audit, pipeline, store
+from copilot import audit, config, pipeline, store
 from copilot.schemas import AuditEntry, Rubric, RubricItem
 from ui import components as c
 from ui import theme
@@ -17,7 +17,7 @@ draft: Rubric = st.session_state["rubric_draft"]
 with st.expander("Draft from a question-paper photo (Gemma 4)", icon=":material/auto_awesome:"):
     photo = st.file_uploader("Photo of the question paper or marking scheme", type=["jpg", "jpeg", "png"])
     if st.button("Draft rubric", icon=":material/auto_awesome:", disabled=photo is None):
-        path = c.save_upload(photo, c.ANCHORS_DIR.parent / "question_papers", "question_paper")
+        path = c.save_upload(photo, config.workspace() / "question_papers", "question_paper")
         try:
             with st.spinner("Reading the question paper…"):
                 new, problems = pipeline.extract_rubric(str(path))

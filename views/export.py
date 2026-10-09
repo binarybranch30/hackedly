@@ -47,6 +47,6 @@ with st.container(border=True):
 with st.container(border=True):
     st.markdown("#### Audit log")
     st.caption("Every grade, flag, retry, fallback, edit and approval, one JSON line each.")
-    if config.AUDIT_PATH.exists():
-        st.download_button("Download audit.jsonl", config.AUDIT_PATH.read_bytes(), "audit.jsonl",
+    if config.audit_path().exists():
+        st.download_button("Download audit.jsonl", config.audit_path().read_bytes(), "audit.jsonl",
                            "application/json", icon=":material/history:")

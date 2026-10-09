@@ -27,8 +27,8 @@ for n, tab in enumerate(tabs):
                 sid = st.text_input("Script ID", a.script_id if a else f"A{n + 1:02d}", key=f"{k}_id")
                 up = st.file_uploader("Answer photo", type=["jpg", "jpeg", "png"], key=f"{k}_up")
                 if up:
-                    c.save_upload(up, c.ANCHORS_DIR, c.script_id_from_name(sid))
-                img = c.find_image(c.script_id_from_name(sid), c.ANCHORS_DIR)
+                    c.save_upload(up, c.anchors_dir(), c.script_id_from_name(sid))
+                img = c.find_image(c.script_id_from_name(sid), c.anchors_dir())
                 if img:
                     st.image(str(img), width="stretch")
                     if st.button("Read handwriting with Gemma 4", key=f"{k}_read", icon=":material/document_scanner:"):

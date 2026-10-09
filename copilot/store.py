@@ -1,44 +1,55 @@
-"""Simple file storage: JSON files under data/. Shared by UI and pipeline."""
+"""Simple file storage: JSON files in the active workspace (data/, or data/sample/
+in sample mode). Shared by UI and pipeline."""
 import json
+from pathlib import Path
 
-from copilot.config import DATA_DIR
+from copilot import config
 from copilot.schemas import AnchorGrade, Rubric, ScriptGrade
 
-RUBRIC_PATH = DATA_DIR / "rubric.json"
-ANCHORS_PATH = DATA_DIR / "anchors" / "anchors.json"
-GRADES_DIR = DATA_DIR / "grades"
+
+def rubric_path() -> Path:
+    return config.workspace() / "rubric.json"
+
+
+def anchors_path() -> Path:
+    return config.workspace() / "anchors" / "anchors.json"
+
+
+def grades_dir() -> Path:
+    return config.workspace() / "grades"
 
 
 def load_rubric() -> Rubric:
-    path = RUBRIC_PATH if RUBRIC_PATH.exists() else DATA_DIR / "rubric.example.json"
+    path = rubric_path() if rubric_path().exists() else config.DATA_DIR / "rubric.example.json"
     return Rubric.model_validate_json(path.read_text(encoding="utf-8"))
 
 
 def save_rubric(rubric: Rubric) -> None:
-    RUBRIC_PATH.write_text(rubric.model_dump_json(indent=2), encoding="utf-8")
+    rubric_path().parent.mkdir(parents=True, exist_ok=True)
+    rubric_path().write_text(rubric.model_dump_json(indent=2), encoding="utf-8")
 
 
 def load_anchors() -> list[AnchorGrade]:
-    if not ANCHORS_PATH.exists():
+    if not anchors_path().exists():
         return []
-    data = json.loads(ANCHORS_PATH.read_text(encoding="utf-8"))
+    data = json.loads(anchors_path().read_text(encoding="utf-8"))
     return [AnchorGrade.model_validate(a) for a in data]
 
 
 def save_anchors(anchors: list[AnchorGrade]) -> None:
-    ANCHORS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    ANCHORS_PATH.write_text(json.dumps([a.model_dump() for a in anchors], indent=2),
-                            encoding="utf-8")
+    anchors_path().parent.mkdir(parents=True, exist_ok=True)
+    anchors_path().write_text(json.dumps([a.model_dump() for a in anchors], indent=2),
+                              encoding="utf-8")
 
 
 def save_grade(grade: ScriptGrade) -> None:
-    GRADES_DIR.mkdir(parents=True, exist_ok=True)
-    (GRADES_DIR / f"{grade.script_id}.json").write_text(grade.model_dump_json(indent=2),
-                                                        encoding="utf-8")
+    grades_dir().mkdir(parents=True, exist_ok=True)
+    (grades_dir() / f"{grade.script_id}.json").write_text(grade.model_dump_json(indent=2),
+                                                          encoding="utf-8")
 
 
 def load_grades() -> list[ScriptGrade]:
-    if not GRADES_DIR.exists():
+    if not grades_dir().exists():
         return []
     return [ScriptGrade.model_validate_json(p.read_text(encoding="utf-8"))
-            for p in sorted(GRADES_DIR.glob("*.json"))]
+            for p in sorted(grades_dir().glob("*.json"))]
