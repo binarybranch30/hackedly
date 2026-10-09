@@ -7,61 +7,70 @@ import html
 
 import streamlit as st
 
-PRIMARY = "#1E33F2"
+PRIMARY = "#0E7C66"
 COLORS = {
-    "primary": "#1E33F2",
-    "success": "#2BC155",
-    "warning": "#FFAC30",
-    "danger": "#FF4C41",
-    "info": "#51A6F5",
-    "muted": "#7E7E7E",
+    "primary": "#0E7C66",
+    "success": "#0E7C66",
+    "warning": "#B86E00",
+    "danger": "#D6453D",
+    "info": "#2F6FD0",
+    "muted": "#5B667A",
 }
 
 # Colour tokens for each mode. Streamlit's own widgets follow .streamlit/config.toml;
 # our custom HTML (cards, board, badges) follows these.
 PALETTES = {
-    "light": {"bg": "#F5F6FA", "card": "#FFFFFF", "sidebar": "#FFFFFF", "text": "#24292D",
-              "muted": "#7E7E7E", "faint": "#A0A4B0", "border": "#EEF0F4", "hover": "#EEF0FE",
-              "mark": "#FFF1D6", "primary": "#1E33F2", "shadow": "rgba(30, 51, 242, .06)"},
-    "dark": {"bg": "#0E1220", "card": "#171C2E", "sidebar": "#121626", "text": "#E6E8EF",
-             "muted": "#9AA0B4", "faint": "#6B7189", "border": "#262C40", "hover": "#1F2640",
-             "mark": "rgba(255, 172, 48, .30)", "primary": "#5B6CFF", "shadow": "rgba(0, 0, 0, .35)"},
+    "light": {"bg": "#F6F7F4", "card": "#FFFFFF", "sidebar": "#FFFFFF", "text": "#0F1B2D",
+              "muted": "#5B667A", "faint": "#9AA3B2", "border": "#E4E6E0", "hover": "#EEF3EF",
+              "mark": "#FCEBC8", "primary": "#0E7C66", "primary-soft": "#DDEFE9",
+              "ink": "#0F1B2D", "ink-text": "#FFFFFF", "paper": "#FBF8EF",
+              "shadow": "rgba(15, 27, 45, .07)"},
+    "dark": {"bg": "#0B1422", "card": "#13213A", "sidebar": "#0F1A2D", "text": "#EEF2F6",
+             "muted": "#A7B1C2", "faint": "#6C7890", "border": "#22314B", "hover": "#1A2A45",
+             "mark": "rgba(252, 196, 90, .28)", "primary": "#2BB394", "primary-soft": "rgba(43, 179, 148, .16)",
+             "ink": "#EEF2F6", "ink-text": "#0B1422", "paper": "#1B2A44",
+             "shadow": "rgba(0, 0, 0, .35)"},
 }
 
 _CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,1,0');
-:root { __VARS__ }
-html, body, .stMarkdown p, .stMarkdown li, input, textarea,
-[data-testid="stSidebarNav"] a span:not([data-testid="stIconMaterial"]) { font-family: 'Cairo', 'Source Sans Pro', sans-serif; }
-.block-container { padding-top: 3.2rem; max-width: 1320px; }
+:root { __VARS__ --ag-head: 'Bricolage Grotesque', 'Plus Jakarta Sans', sans-serif;
+        --ag-body: 'Plus Jakarta Sans', sans-serif; }
+.block-container { padding-top: 3rem; max-width: 1240px; }
 [data-testid="stHeader"] { background: transparent; }
-.ag-icon { font-family: 'Material Symbols Rounded'; font-size: 1.5rem; line-height: 1; }
+.ag-icon { font-family: 'Material Symbols Rounded'; font-size: 1.4rem; line-height: 1; }
 
-/* Built-in multipage nav (st.navigation): pill-shaped items, blue active item */
-[data-testid="stSidebarNav"] a { border-radius: .75rem; padding: .45rem .8rem; margin: .1rem 0; }
-[data-testid="stSidebarNav"] a[aria-current="page"] { background: var(--ag-primary); }
-[data-testid="stSidebarNav"] a[aria-current="page"] span { color: #FFFFFF !important; font-weight: 600; }
-[data-testid="stSidebarNav"] a:hover:not([aria-current="page"]) { background: var(--ag-hover); }
+/* Sidebar + built-in navigation: navy pill for the active page */
 [data-testid="stSidebar"] { background: var(--ag-sidebar); border-right: 1px solid var(--ag-border); }
+[data-testid="stSidebarNav"] a { border-radius: 999px; padding: .45rem .9rem; margin: .12rem 0; }
+[data-testid="stSidebarNav"] a[aria-current="page"] { background: var(--ag-ink); }
+[data-testid="stSidebarNav"] a[aria-current="page"] span { color: var(--ag-ink-text) !important; font-weight: 600; }
+[data-testid="stSidebarNav"] a:hover:not([aria-current="page"]) { background: var(--ag-hover); }
 
-/* Cards */
-.ag-card { background: var(--ag-card); border-radius: .875rem; padding: 1.1rem 1.25rem;
-           box-shadow: 0 2px 12px var(--ag-shadow); margin-bottom: 1rem; }
+/* Bordered containers become white cards */
+[data-testid="stVerticalBlockBorderWrapper"] { background: var(--ag-card); border-radius: 1rem; }
+
+/* Page title */
+.ag-title { font-family: var(--ag-head); font-size: 2.3rem; font-weight: 800; color: var(--ag-text);
+            margin: 0; line-height: 1.1; letter-spacing: -.02em; }
+.ag-subtitle { color: var(--ag-muted); margin: .4rem 0 1.4rem 0; font-size: 1.02rem; max-width: 720px; }
+.ag-eyebrow { display: inline-block; background: var(--ag-primary-soft); color: var(--ag-primary);
+              font-size: .78rem; font-weight: 600; padding: .25rem .7rem; border-radius: 999px; margin-bottom: .8rem; }
+
+/* Stat cards */
+.ag-card { background: var(--ag-card); border: 1px solid var(--ag-border); border-radius: 1rem;
+           padding: 1rem 1.2rem; margin-bottom: 1rem; }
 .ag-stat { display: flex; align-items: center; gap: .8rem; }
 .ag-stat > div:last-child { min-width: 0; }
-.ag-stat-icon { width: 2.8rem; height: 2.8rem; border-radius: 50%; display: flex;
-                align-items: center; justify-content: center; font-size: 1.4rem; flex-shrink: 0; }
-.ag-stat-value { font-size: 1.6rem; font-weight: 700; line-height: 1.1; color: var(--ag-text); }
-.ag-stat-label { font-size: .85rem; color: var(--ag-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ag-title { font-size: 1.9rem; font-weight: 700; color: var(--ag-text); margin: 0; line-height: 1.2; }
-.ag-subtitle { color: var(--ag-muted); margin: .2rem 0 1.2rem 0; font-size: 1rem; }
+.ag-stat-icon { width: 2.6rem; height: 2.6rem; border-radius: .8rem; display: flex;
+                align-items: center; justify-content: center; flex-shrink: 0; }
+.ag-stat-value { font-family: var(--ag-head); font-size: 1.6rem; font-weight: 700; line-height: 1.1; color: var(--ag-text); }
+.ag-stat-label { font-size: .82rem; color: var(--ag-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Badges */
-.ag-badge { display: inline-block; padding: .15rem .6rem; border-radius: 1rem; font-size: .75rem;
+.ag-badge { display: inline-block; padding: .15rem .65rem; border-radius: 999px; font-size: .74rem;
             font-weight: 600; margin: 0 .25rem .25rem 0; }
-[data-testid="stVerticalBlockBorderWrapper"] { background: var(--ag-card); border-radius: .875rem; }
 mark { background: var(--ag-mark); color: inherit; padding: 0 .15rem; border-radius: 3px; }
 </style>
 """
@@ -94,8 +103,9 @@ def sidebar_nav(pages: list[str], brand: str = "Hackedly", tagline: str = "Gradi
     return st.sidebar.radio("Menu", pages, label_visibility="collapsed")
 
 
-def page_header(title: str, subtitle: str = "") -> None:
-    st.markdown(f"<div class='ag-title'>{html.escape(title)}</div>"
+def page_header(title: str, subtitle: str = "", eyebrow: str = "") -> None:
+    eb = f"<div class='ag-eyebrow'>{html.escape(eyebrow)}</div>" if eyebrow else ""
+    st.markdown(eb + f"<div class='ag-title'>{html.escape(title)}</div>"
                 f"<div class='ag-subtitle'>{html.escape(subtitle)}</div>", unsafe_allow_html=True)
 
 
