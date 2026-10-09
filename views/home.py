@@ -31,7 +31,9 @@ def thumb_b64(path: str, mtime: float) -> str:
 
 def hero_card() -> str:
     """The most interesting graded sheet (needs review first), shown like a report card."""
-    pick = (need or grades or [None])[0]
+    # Prefer a sheet that has marks to show (an unreadable sheet has none), flagged ones first.
+    pick = (next((g for g in need if g.items), None) or next((g for g in grades if g.items), None)
+            or (need or grades or [None])[0])
     if pick is None:
         rows = [(f"{i.item_id}  {i.description}", f"– / {i.max_marks}", pal["faint"]) for i in rubric.items]
         return board.sheet_card("Your class", f"{len(waiting)} sheet(s) waiting to be graded",
