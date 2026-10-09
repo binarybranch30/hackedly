@@ -25,13 +25,13 @@ theme.page_header(page, "Backend: fake · nothing is released until the teacher 
 
 c1, c2, c3, c4 = st.columns(4)
 with c1:
-    theme.stat_card("Scripts graded", len(grades), "📄", "primary")
+    theme.stat_card("Scripts graded", len(grades), "description", "primary")
 with c2:
-    theme.stat_card("Need review", sum(g.status == "needs_review" for g in grades), "⚑", "warning")
+    theme.stat_card("Need review", sum(g.status == "needs_review" for g in grades), "flag", "warning")
 with c3:
-    theme.stat_card("Approved", sum(g.status == "approved" for g in grades), "✓", "success")
+    theme.stat_card("Approved", sum(g.status == "approved" for g in grades), "check_circle", "success")
 with c4:
-    theme.stat_card("Avg score", f"{sum(g.total for g in grades) / len(grades):.1f}/{rubric.max_total}", "★", "info")
+    theme.stat_card("Avg score", f"{sum(g.total for g in grades) / len(grades):.1f}/{rubric.max_total}", "star", "info")
 
 left, right = st.columns([3, 2])
 with left:

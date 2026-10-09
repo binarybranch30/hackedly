@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="44" viewBox="0 0 220 44">
+  <rect x="2" y="4" width="36" height="36" rx="10" fill="#1E33F2"/>
+  <path d="M11 29 L17 15 L23 29 M13.5 24 H20.5" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M25 24 l3 3 l6 -8" stroke="#2BC155" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="48" y="30" font-family="Cairo, Segoe UI, Arial, sans-serif" font-size="21" font-weight="700" fill="#24292D">Anchor<tspan fill="#1E33F2">Grade</tspan></text>
+</svg>

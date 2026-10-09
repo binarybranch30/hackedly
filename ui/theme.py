@@ -20,8 +20,18 @@ COLORS = {
 _CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
-html, body, [class*="css"], .stMarkdown, button, input, textarea { font-family: 'Cairo', sans-serif; }
-.block-container { padding-top: 1.5rem; max-width: 1300px; }
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,1,0');
+html, body, .stMarkdown p, .stMarkdown li, input, textarea,
+[data-testid="stSidebarNav"] a span:not([data-testid="stIconMaterial"]) { font-family: 'Cairo', 'Source Sans Pro', sans-serif; }
+.block-container { padding-top: 3.2rem; max-width: 1320px; }
+[data-testid="stHeader"] { background: transparent; }
+.ag-icon { font-family: 'Material Symbols Rounded'; font-size: 1.5rem; line-height: 1; }
+
+/* Built-in multipage nav (st.navigation): pill-shaped items, blue active item */
+[data-testid="stSidebarNav"] a { border-radius: .75rem; padding: .45rem .8rem; margin: .1rem 0; }
+[data-testid="stSidebarNav"] a[aria-current="page"] { background: #1E33F2; }
+[data-testid="stSidebarNav"] a[aria-current="page"] span { color: #FFFFFF !important; font-weight: 600; }
+[data-testid="stSidebarNav"] a:hover:not([aria-current="page"]) { background: #EEF0FE; }
 
 /* Sidebar: white panel, blue active item */
 [data-testid="stSidebar"] { background: #FFFFFF; border-right: 1px solid #EEEEEE; }
@@ -37,13 +47,14 @@ html, body, [class*="css"], .stMarkdown, button, input, textarea { font-family: 
 /* Cards */
 .ag-card { background: #FFFFFF; border-radius: .875rem; padding: 1.1rem 1.25rem;
            box-shadow: 0 2px 12px rgba(30, 51, 242, .06); margin-bottom: 1rem; }
-.ag-stat { display: flex; align-items: center; gap: 1rem; }
-.ag-stat-icon { width: 3.2rem; height: 3.2rem; border-radius: 50%; display: flex;
+.ag-stat { display: flex; align-items: center; gap: .8rem; }
+.ag-stat > div:last-child { min-width: 0; }
+.ag-stat-icon { width: 2.8rem; height: 2.8rem; border-radius: 50%; display: flex;
                 align-items: center; justify-content: center; font-size: 1.4rem; flex-shrink: 0; }
 .ag-stat-value { font-size: 1.6rem; font-weight: 700; line-height: 1.1; color: #24292D; }
-.ag-stat-label { font-size: .85rem; color: #7E7E7E; }
-.ag-title { font-size: 1.6rem; font-weight: 700; color: #24292D; margin: 0; }
-.ag-subtitle { color: #7E7E7E; margin: 0 0 1rem 0; }
+.ag-stat-label { font-size: .85rem; color: #7E7E7E; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ag-title { font-size: 1.9rem; font-weight: 700; color: #24292D; margin: 0; line-height: 1.2; }
+.ag-subtitle { color: #7E7E7E; margin: .2rem 0 1.2rem 0; font-size: 1rem; }
 
 /* Badges */
 .ag-badge { display: inline-block; padding: .15rem .6rem; border-radius: 1rem; font-size: .75rem;
@@ -69,16 +80,18 @@ def sidebar_nav(pages: list[str], brand: str = "AnchorGrade", tagline: str = "Gr
 
 
 def page_header(title: str, subtitle: str = "") -> None:
-    st.markdown(f"<p class='ag-title'>{html.escape(title)}</p>"
-                f"<p class='ag-subtitle'>{html.escape(subtitle)}</p>", unsafe_allow_html=True)
+    st.markdown(f"<div class='ag-title'>{html.escape(title)}</div>"
+                f"<div class='ag-subtitle'>{html.escape(subtitle)}</div>", unsafe_allow_html=True)
 
 
-def stat_card(label: str, value, icon: str = "●", color: str = "primary") -> None:
-    """A white card with a coloured icon circle. Use inside st.columns()."""
+def stat_card(label: str, value, icon: str = "description", color: str = "primary") -> None:
+    """A white card with a coloured icon circle. Use inside st.columns().
+    `icon` is a Material Symbols name, e.g. description, flag, check_circle, star, timer."""
     c = COLORS.get(color, color)
     st.markdown(
         f"<div class='ag-card ag-stat'>"
-        f"<div class='ag-stat-icon' style='background:{c}1A;color:{c}'>{html.escape(icon)}</div>"
+        f"<div class='ag-stat-icon' style='background:{c}1A;color:{c}'>"
+        f"<span class='ag-icon'>{html.escape(icon)}</span></div>"
         f"<div><div class='ag-stat-value'>{html.escape(str(value))}</div>"
         f"<div class='ag-stat-label'>{html.escape(label)}</div></div></div>",
         unsafe_allow_html=True)
