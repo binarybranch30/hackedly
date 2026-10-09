@@ -10,7 +10,7 @@ from ui import components, theme
 
 st.set_page_config(page_title="Hackedly", page_icon=":material/grading:", layout="wide")
 theme.inject_css()
-st.logo("ui/logo.svg", size="large")
+st.logo("ui/logo-dark.svg" if theme.is_dark() else "ui/logo.svg", size="large")
 
 pages = [
     st.Page("views/home.py", title="Home", icon=":material/home:", default=True),

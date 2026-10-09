@@ -106,11 +106,32 @@ def show_flash() -> None:
         getattr(st, kind)(msg)
 
 
+PAGE_PATHS = ["", "home", "setup", "grade", "review", "insights"]
+
+
+def set_theme(mode: str) -> None:
+    """Switch Streamlit's light/dark theme for this browser, then reload.
+    Streamlit keeps the choice in localStorage, one key per page path."""
+    import json
+
+    import streamlit.components.v1 as components
+
+    keys = json.dumps([f"stActiveTheme-/{p}-v2" for p in PAGE_PATHS])
+    components.html(f"""<script>
+      const s = window.parent.localStorage;
+      for (const k of {keys}) s.setItem(k, JSON.stringify("{mode}"));
+      window.parent.location.reload();
+    </script>""", height=0)
+
+
 def sidebar_status() -> None:
     """Compact sidebar footer: sample-class switch + which model is grading."""
     from copilot import sample  # local import: only the website needs it
 
     with st.sidebar:
+        dark = st.toggle("Dark mode", value=theme.is_dark(), key="dark_mode")
+        if dark != theme.is_dark():
+            set_theme("Dark" if dark else "Light")
         on = st.toggle("Sample class", value=config.sample_mode(),
                        help="A prepared class (rubric, 3 graded anchors, 8 answer-sheet PDFs) for demos. "
                             "The sheets are graded live. Your own data is kept separately.")

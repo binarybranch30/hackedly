@@ -1,13 +1,21 @@
-# Palette inspired by an admin-dashboard style (blue primary, light grey canvas).
+# Two palettes; the sidebar "Dark mode" switch picks one (Streamlit's own light/dark themes).
 [theme]
-base = "light"
+primaryColor = "#1E33F2"
+
+[theme.light]
 primaryColor = "#1E33F2"
 backgroundColor = "#F5F6FA"
 secondaryBackgroundColor = "#FFFFFF"
 textColor = "#24292D"
 
+[theme.dark]
+primaryColor = "#5B6CFF"
+backgroundColor = "#0E1220"
+secondaryBackgroundColor = "#171C2E"
+textColor = "#E6E8EF"
+
 [client]
 toolbarMode = "viewer"      # hide the developer "Deploy" menu
 
 [server]
-maxUploadSize = 25          # MB per photo
+maxUploadSize = 25          # MB per file
