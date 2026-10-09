@@ -17,10 +17,22 @@ COLORS = {
     "muted": "#7E7E7E",
 }
 
+# Colour tokens for each mode. Streamlit's own widgets follow .streamlit/config.toml;
+# our custom HTML (cards, board, badges) follows these.
+PALETTES = {
+    "light": {"bg": "#F5F6FA", "card": "#FFFFFF", "sidebar": "#FFFFFF", "text": "#24292D",
+              "muted": "#7E7E7E", "faint": "#A0A4B0", "border": "#EEF0F4", "hover": "#EEF0FE",
+              "mark": "#FFF1D6", "primary": "#1E33F2", "shadow": "rgba(30, 51, 242, .06)"},
+    "dark": {"bg": "#0E1220", "card": "#171C2E", "sidebar": "#121626", "text": "#E6E8EF",
+             "muted": "#9AA0B4", "faint": "#6B7189", "border": "#262C40", "hover": "#1F2640",
+             "mark": "rgba(255, 172, 48, .30)", "primary": "#5B6CFF", "shadow": "rgba(0, 0, 0, .35)"},
+}
+
 _CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,1,0');
+:root { __VARS__ }
 html, body, .stMarkdown p, .stMarkdown li, input, textarea,
 [data-testid="stSidebarNav"] a span:not([data-testid="stIconMaterial"]) { font-family: 'Cairo', 'Source Sans Pro', sans-serif; }
 .block-container { padding-top: 3.2rem; max-width: 1320px; }
@@ -29,44 +41,47 @@ html, body, .stMarkdown p, .stMarkdown li, input, textarea,
 
 /* Built-in multipage nav (st.navigation): pill-shaped items, blue active item */
 [data-testid="stSidebarNav"] a { border-radius: .75rem; padding: .45rem .8rem; margin: .1rem 0; }
-[data-testid="stSidebarNav"] a[aria-current="page"] { background: #1E33F2; }
+[data-testid="stSidebarNav"] a[aria-current="page"] { background: var(--ag-primary); }
 [data-testid="stSidebarNav"] a[aria-current="page"] span { color: #FFFFFF !important; font-weight: 600; }
-[data-testid="stSidebarNav"] a:hover:not([aria-current="page"]) { background: #EEF0FE; }
-
-/* Sidebar: white panel, blue active item */
-[data-testid="stSidebar"] { background: #FFFFFF; border-right: 1px solid #EEEEEE; }
-[data-testid="stSidebar"] [role="radiogroup"] label {
-  padding: .55rem .9rem; border-radius: .75rem; margin-bottom: .25rem; width: 100%;
-}
-[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {
-  background: #1E33F2; color: #FFFFFF;
-}
-[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) p { color: #FFFFFF; font-weight: 600; }
-[data-testid="stSidebar"] [role="radiogroup"] label > div:first-child { display: none; }
+[data-testid="stSidebarNav"] a:hover:not([aria-current="page"]) { background: var(--ag-hover); }
+[data-testid="stSidebar"] { background: var(--ag-sidebar); border-right: 1px solid var(--ag-border); }
 
 /* Cards */
-.ag-card { background: #FFFFFF; border-radius: .875rem; padding: 1.1rem 1.25rem;
-           box-shadow: 0 2px 12px rgba(30, 51, 242, .06); margin-bottom: 1rem; }
+.ag-card { background: var(--ag-card); border-radius: .875rem; padding: 1.1rem 1.25rem;
+           box-shadow: 0 2px 12px var(--ag-shadow); margin-bottom: 1rem; }
 .ag-stat { display: flex; align-items: center; gap: .8rem; }
 .ag-stat > div:last-child { min-width: 0; }
 .ag-stat-icon { width: 2.8rem; height: 2.8rem; border-radius: 50%; display: flex;
                 align-items: center; justify-content: center; font-size: 1.4rem; flex-shrink: 0; }
-.ag-stat-value { font-size: 1.6rem; font-weight: 700; line-height: 1.1; color: #24292D; }
-.ag-stat-label { font-size: .85rem; color: #7E7E7E; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ag-title { font-size: 1.9rem; font-weight: 700; color: #24292D; margin: 0; line-height: 1.2; }
-.ag-subtitle { color: #7E7E7E; margin: .2rem 0 1.2rem 0; font-size: 1rem; }
+.ag-stat-value { font-size: 1.6rem; font-weight: 700; line-height: 1.1; color: var(--ag-text); }
+.ag-stat-label { font-size: .85rem; color: var(--ag-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ag-title { font-size: 1.9rem; font-weight: 700; color: var(--ag-text); margin: 0; line-height: 1.2; }
+.ag-subtitle { color: var(--ag-muted); margin: .2rem 0 1.2rem 0; font-size: 1rem; }
 
 /* Badges */
 .ag-badge { display: inline-block; padding: .15rem .6rem; border-radius: 1rem; font-size: .75rem;
             font-weight: 600; margin: 0 .25rem .25rem 0; }
-[data-testid="stVerticalBlockBorderWrapper"] { background: #FFFFFF; border-radius: .875rem; }
-mark { background: #FFF1D6; padding: 0 .15rem; border-radius: 3px; }
+[data-testid="stVerticalBlockBorderWrapper"] { background: var(--ag-card); border-radius: .875rem; }
+mark { background: var(--ag-mark); color: inherit; padding: 0 .15rem; border-radius: 3px; }
 </style>
 """
 
 
+def is_dark() -> bool:
+    """Is the viewer using the dark theme? (Streamlit reports it per session.)"""
+    try:
+        return st.context.theme.type == "dark"
+    except Exception:  # older Streamlit / bare mode
+        return False
+
+
+def palette() -> dict:
+    return PALETTES["dark" if is_dark() else "light"]
+
+
 def inject_css() -> None:
-    st.markdown(_CSS, unsafe_allow_html=True)
+    tokens = " ".join(f"--ag-{k}: {v};" for k, v in palette().items())
+    st.markdown(_CSS.replace("__VARS__", tokens), unsafe_allow_html=True)
 
 
 def sidebar_nav(pages: list[str], brand: str = "Hackedly", tagline: str = "Grading copilot") -> str:
