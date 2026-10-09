@@ -165,6 +165,7 @@ with tab_review:
     for grade in grades:
         icon = "⚠️" if grade.status == "needs_review" else "🔒" if grade.status in ("approved", "released") else "✅"
         with st.expander(f"{icon} {grade.script_id} — {grade.total}/{grade.max_total} — {grade.status}", expanded=grade.status == "needs_review"):
+            st.caption(f"{grade.seconds:.2f}s · {grade.model_calls} model calls")
             if grade.backend != config.MODEL_BACKEND:
                 st.warning("Graded by local fallback model")
             if grade.flags:
