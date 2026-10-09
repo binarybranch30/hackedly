@@ -201,9 +201,13 @@ def main() -> None:
     print(f"Settings used: temperature {config.TEMPERATURE}, backend {config.MODEL_BACKEND}, "
           f"date/time {datetime.now(timezone.utc).isoformat()}.")
     if fake_backend:
+        try:
+            result_location = str(results_root.relative_to(ROOT))
+        except ValueError:
+            result_location = str(results_root)
         print("\n" + "!" * 68)
         print("FAKE BACKEND, do not report these numbers")
-        print(f"Results were isolated in {results_root.relative_to(ROOT)}/")
+        print(f"Results were isolated in {result_location}/")
         print("!" * 68)
 
 
