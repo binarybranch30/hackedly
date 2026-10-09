@@ -145,7 +145,8 @@ def main() -> None:
     cal_reference = {script_id: grades[0] for script_id, grades in calibrated.items()}
     cal_totals = {script_id: grade.total for script_id, grade in cal_reference.items()}
     item_mae = lambda grades: {item.item_id: statistics.mean(abs(
-        next(graded.final_marks for graded in grades[script_id].items if graded.item_id == item.item_id)
+        next((graded.final_marks for graded in grades[script_id].items
+              if graded.item_id == item.item_id), 0)
         - teacher[script_id]["items"][item.item_id]) for script_id in heldout_ids) for item in rubric.items}
     uncal_item_mae, cal_item_mae = item_mae(uncalibrated), item_mae(cal_reference)
     consistency_data = consistency({script_id: [grade.total for grade in grades] for script_id, grades in calibrated.items()})
