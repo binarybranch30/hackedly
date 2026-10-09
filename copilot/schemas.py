@@ -14,7 +14,9 @@ from pydantic import BaseModel, Field
 
 Confidence = Literal["high", "medium", "low"]
 Legibility = Literal["good", "partial", "unreadable"]
-Status = Literal["needs_review", "auto_ok", "approved", "released"]
+Status = Literal["needs_review", "auto_ok", "approved", "released", "rescan"]
+# "rescan": the teacher decided the sheet cannot be marked (blurred, cut off, ...)
+# and needs a new scan. Such sheets are never released.
 
 # Flag codes used by rules.py / pipeline.py and shown in the UI.
 FLAG_UNREADABLE = "UNREADABLE"            # image could not be read
@@ -102,6 +104,7 @@ class ScriptGrade(BaseModel):
     status: Status = "needs_review"
     seconds: float = 0.0              # wall-clock time to grade this script
     model_calls: int = 0              # number of model requests (incl. retries)
+    teacher_note: str = ""            # e.g. why the teacher could not mark it
 
 
 class AuditEntry(BaseModel):

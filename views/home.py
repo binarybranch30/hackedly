@@ -17,6 +17,7 @@ graded = {g.script_id for g in grades}
 waiting = [p for p in c.scripts_dir().glob("*") if p.suffix.lower() in c.IMAGE_EXTS and p.stem not in graded]
 need = [g for g in grades if g.status == "needs_review"]
 done = [g for g in grades if g.status in ("approved", "released")]
+rescan = [g for g in grades if g.status == "rescan"]
 pal = theme.palette()
 
 
@@ -47,7 +48,8 @@ def hero_card() -> str:
                                                "#B86E00" if m < r.max_marks / 2 else pal["text"])
         rows.append((f"{r.item_id}  {r.description}", f"{'–' if m is None else m} / {r.max_marks}", tone))
     pill = {"needs_review": ("Review pending", "#B86E00"), "auto_ok": ("Auto-OK", "#0E7C66"),
-            "approved": ("Approved", "#0E7C66"), "released": ("Released", "#2F6FD0")}[pick.status]
+            "approved": ("Approved", "#0E7C66"), "released": ("Released", "#2F6FD0"),
+            "rescan": ("Needs rescan", "#D6453D")}[pick.status]
     img = c.find_image(pick.script_id)
     b64 = thumb_b64(str(img), img.stat().st_mtime) if img else None
     pos = sorted(graded).index(pick.script_id) + 1
@@ -83,7 +85,8 @@ steps = [
     (s2, "2", "Upload the scripts", f"Scans or photos, PDF or image. Each sheet is read, graded twice and "
      f"checked live. Now: {len(waiting)} waiting, {len(grades)} graded.", "views/grade.py", "Grade"),
     (s3, "3", "Review and release", f"Marks per question with evidence. Confirm or adjust, then release. "
-     f"Now: {len(need)} need review, {len(done)} approved.", "views/review.py", "Review"),
+     f"Now: {len(need)} need review, {len(done)} approved"
+     + (f", {len(rescan)} to rescan." if rescan else "."), "views/review.py", "Review"),
 ]
 for col, n, title, text, link, label in steps:
     with col:

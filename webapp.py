@@ -20,6 +20,7 @@ pages = [
     st.Page("views/insights.py", title="Insights", icon=":material/insights:"),
 ]
 page = st.navigation(pages)
+components.theme_button()
 components.sidebar_status()
 if config.sample_mode():
     st.markdown("<div style='background:var(--ag-primary-soft);color:var(--ag-primary);border-radius:.8rem;"
