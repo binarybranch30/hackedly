@@ -17,7 +17,7 @@
 3. Drift-check banner
 4. Human-vs-human baseline (second blind grader)
 
-**Future work, not built today:** rubric extraction from a question-paper photo; Gemma function calling.
+**Built early (ahead of schedule):** rubric draft from a question-paper photo (`pipeline.extract_rubric`), with the teacher approving it. **Future work:** Gemma function calling.
 
 ## Schedule
 | Time | What | Done when |

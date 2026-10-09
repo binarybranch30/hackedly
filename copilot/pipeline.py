@@ -5,6 +5,7 @@ Functions for the UI / eval:
   grade_batch(scripts, rubric, anchors, on_progress) -> (grades, drift_results)
   transcribe_image(image_path) -> Transcription      pre-fill the Anchors form
   drift_check(rubric, anchors, index) -> dict         re-grade one anchor
+  extract_rubric(image_path) -> (Rubric, problems)    draft rubric from a question-paper photo
   approve(script_id, edits) / export_csv(path)        teacher approval + release
 """
 import csv
@@ -174,6 +175,51 @@ def drift_check(rubric: Rubric, anchors: list[AnchorGrade], index: int = 0) -> d
                          backend=models.last_backend_used(),
                          model=models.model_name(models.last_backend_used())))
     return result
+
+
+def extract_rubric(image_path: str) -> tuple[Rubric, list[str]]:
+    """Draft a rubric from a photo of the question paper / marking scheme.
+
+    Returns (draft, problems). `problems` are code-checked issues the teacher
+    must fix. The draft is NEVER saved here: the teacher edits it and the UI
+    saves it with store.save_rubric (human approval).
+    Raises ValueError for unusable images and ModelError if the model fails.
+    """
+    problem = _image_problem(image_path)
+    if problem:
+        raise ValueError(problem)
+    draft = models.generate_json(prompts.RUBRIC_SYSTEM,
+                                 "Draft a marking rubric for this question paper.",
+                                 image_path, Rubric)
+    problems = check_rubric(draft)
+    audit.log(AuditEntry(actor="system", action="transcribe", script_id="rubric",
+                         after=f"{len(draft.items)} items, {draft.max_total} marks",
+                         reason=f"rubric draft; problems: {problems or 'none'}",
+                         backend=models.last_backend_used(),
+                         model=models.model_name(models.last_backend_used())))
+    return draft, problems
+
+
+def check_rubric(rubric: Rubric) -> list[str]:
+    """Code checks on a rubric (model-drafted or teacher-typed). Empty list = OK."""
+    problems = []
+    if not rubric.items:
+        problems.append("rubric has no items")
+    ids = [i.item_id for i in rubric.items]
+    if len(ids) != len(set(ids)):
+        problems.append("duplicate item ids")
+    for i in rubric.items:
+        if i.max_marks <= 0:
+            problems.append(f"{i.item_id}: max_marks must be positive")
+        if not i.allowed_marks or 0 not in i.allowed_marks:
+            problems.append(f"{i.item_id}: allowed marks should include 0")
+        if max(i.allowed_marks, default=-1) != i.max_marks:
+            problems.append(f"{i.item_id}: highest allowed mark should equal max_marks ({i.max_marks})")
+        if any(m < 0 or m > i.max_marks for m in i.allowed_marks):
+            problems.append(f"{i.item_id}: allowed marks must be between 0 and {i.max_marks}")
+        if not i.description.strip():
+            problems.append(f"{i.item_id}: missing description")
+    return problems
 
 
 def approve(script_id: str, edits: dict[str, int], teacher: str = "teacher") -> ScriptGrade:
