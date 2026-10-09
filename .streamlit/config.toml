@@ -1,0 +1,7 @@
+# Palette inspired by an admin-dashboard style (blue primary, light grey canvas).
+[theme]
+base = "light"
+primaryColor = "#1E33F2"
+backgroundColor = "#F5F6FA"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#24292D"
