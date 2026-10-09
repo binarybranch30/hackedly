@@ -17,11 +17,11 @@ with st.container(border=True):
                f"{len(anchors)} anchor script(s) for calibration")
     uploads = st.file_uploader("Answer photos (one answer per photo). The file name becomes the script ID.",
                                type=["jpg", "jpeg", "png"], accept_multiple_files=True)
-    waiting = sorted(p for p in c.SCRIPTS_DIR.glob("*") if p.suffix.lower() in c.IMAGE_EXTS
+    waiting = sorted(p for p in c.scripts_dir().glob("*") if p.suffix.lower() in c.IMAGE_EXTS
                      and p.stem not in {g.script_id for g in store.load_grades()})
     use_folder = False
     if waiting:
-        use_folder = st.checkbox(f"Also grade {len(waiting)} ungraded photo(s) already in data/scripts/")
+        use_folder = st.checkbox(f"Also grade {len(waiting)} ungraded photo(s) already in the scripts folder")
     calibrated = st.toggle("Use my anchor scripts to calibrate", value=bool(anchors), disabled=not anchors,
                            help="Puts your graded anchors in the prompt so the model marks like you.")
     if not anchors:
@@ -33,7 +33,7 @@ if go:
     scripts = []
     for up in uploads or []:
         sid = c.script_id_from_name(up.name)
-        scripts.append(Script(script_id=sid, image_path=str(c.save_upload(up, c.SCRIPTS_DIR, sid))))
+        scripts.append(Script(script_id=sid, image_path=str(c.save_upload(up, c.scripts_dir(), sid))))
     if use_folder:
         scripts += [Script(script_id=p.stem, image_path=str(p)) for p in waiting
                     if p.stem not in {s.script_id for s in scripts}]

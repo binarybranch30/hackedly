@@ -11,6 +11,7 @@ Functions for the UI / eval:
 import csv
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from PIL import Image
@@ -90,6 +91,7 @@ def grade_script(script: Script, rubric: Rubric,
     if backends_used - {config.MODEL_BACKEND}:
         flags.add(FLAG_FALLBACK_USED)
         grade.backend = ",".join(sorted(backends_used))
+        grade.model = ", ".join(models.model_name(b) for b in sorted(backends_used))
     grade.items, grade.total, grade.flags = items, total, sorted(flags)
     _finish(grade, f"run totals {total} and {total2}", start, calls0)
     return grade
@@ -133,14 +135,18 @@ def grade_batch(scripts: list[Script], rubric: Rubric, anchors: list[AnchorGrade
     Returns (grades, drift_results); see drift_check for the dict format.
     """
     grades, drift = [], []
-    for n, script in enumerate(scripts, 1):
-        g = grade_script(script, rubric, anchors, calibrated)
-        grades.append(g)
-        if on_progress:
-            on_progress(n, len(scripts), g)
-        if calibrated and anchors and len(anchors) >= 2 and n % DRIFT_EVERY == 0:
-            drift.append(drift_check(rubric, anchors, index=(n // DRIFT_EVERY - 1) % len(anchors)))
-    return grades, drift
+    workers = max(1, min(config.PARALLEL_SCRIPTS, len(scripts)))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = [pool.submit(grade_script, s, rubric, anchors, calibrated) for s in scripts]
+        for n, fut in enumerate(as_completed(futures), 1):  # callbacks run on the caller's thread
+            g = fut.result()
+            grades.append(g)
+            if on_progress:
+                on_progress(n, len(scripts), g)
+            if calibrated and anchors and len(anchors) >= 2 and n % DRIFT_EVERY == 0:
+                drift.append(drift_check(rubric, anchors, index=(n // DRIFT_EVERY - 1) % len(anchors)))
+    order = {s.script_id: i for i, s in enumerate(scripts)}
+    return sorted(grades, key=lambda g: order.get(g.script_id, 0)), drift
 
 
 def transcribe_image(image_path: str) -> Transcription:

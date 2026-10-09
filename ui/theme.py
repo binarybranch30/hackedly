@@ -69,7 +69,7 @@ def inject_css() -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
 
 
-def sidebar_nav(pages: list[str], brand: str = "AnchorGrade", tagline: str = "Grading copilot") -> str:
+def sidebar_nav(pages: list[str], brand: str = "Hackedly", tagline: str = "Grading copilot") -> str:
     """Sidebar menu; returns the selected page name."""
     st.sidebar.markdown(
         f"<div style='padding:.5rem .25rem 1rem'><span style='font-size:1.5rem;font-weight:700;"

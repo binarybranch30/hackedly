@@ -14,7 +14,7 @@ from copilot.fake import fake_script_grade  # noqa: E402
 from copilot import store  # noqa: E402
 from ui import theme  # noqa: E402
 
-st.set_page_config(page_title="AnchorGrade", page_icon="✎", layout="wide")
+st.set_page_config(page_title="Hackedly", page_icon="✎", layout="wide")
 theme.inject_css()
 
 page = theme.sidebar_nav(["Dashboard", "Rubric", "Anchors", "Grade", "Review", "Export", "Audit log"])

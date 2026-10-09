@@ -1,4 +1,4 @@
-# AnchorGrade
+# Hackedly
 
 An AI copilot that helps teachers grade **handwritten answer sheets**, built at Hacktoberfest Hack Day Bengaluru '26 (IEEE CIS) for PS 02, *Intelligent Personal / Professional Copilot*.
 
@@ -28,8 +28,11 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the diagram, schemas and failure hand
 ## Models
 | Role | Model | How |
 |---|---|---|
-| Main | `gemma-4-31b-it` (Gemma 4, open-weight) | Gemini API |
-| Local fallback | `gemma4:e2b` | Ollama on `localhost:11434` |
+| Main | `gemma-4-26b-a4b-it` (Gemma 4, open-weight) | Gemini API |
+| Fallback when the main one is overloaded | `gemma-4-31b-it` (Gemma 4) | Gemini API |
+| Optional local fallback | `gemma4:e2b` | Ollama on `localhost:11434` |
+
+Both API models are configurable in `.env` (`GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL`). In our tests on 2026-10-09, the 26B-A4B model answered in about 1 second per call, while the 31B model took 30–60 seconds and often returned `503 high demand`. That is why the 26B-A4B model is the default.
 
 Switch with `MODEL_BACKEND=gemini|ollama|fake` in `.env`.
 

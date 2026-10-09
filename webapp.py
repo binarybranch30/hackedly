@@ -1,13 +1,14 @@
-"""AnchorGrade website (multi-page dashboard).
+"""Hackedly website (multi-page dashboard).
 
 Run:  streamlit run webapp.py
 Pages live in views/. Shared look in ui/theme.py, helpers in ui/components.py.
 """
 import streamlit as st
 
+from copilot import config
 from ui import components, theme
 
-st.set_page_config(page_title="AnchorGrade", page_icon=":material/grading:", layout="wide")
+st.set_page_config(page_title="Hackedly", page_icon=":material/grading:", layout="wide")
 theme.inject_css()
 st.logo("ui/logo.svg", size="large")
 
@@ -31,4 +32,8 @@ pages = {
 }
 page = st.navigation(pages)
 components.sidebar_status()
+if config.sample_mode():
+    st.info("**Sample class.** Prepared example answers and marks that show the whole workflow. They are "
+            "not live model output. New photos you upload here are graded by the real backend. "
+            "Switch off *Sample class* in the sidebar to return to your own data.", icon=":material/school:")
 page.run()
