@@ -95,6 +95,8 @@ except ValueError:
     pass
 g = pipeline.approve("clean", {"1a": 0})
 assert g.total == 2 and g.status == "approved"
+g = pipeline.approve("unreadable", {"1a": 1, "1b": 1, "1c": 0})   # teacher marks by hand
+assert g.total == 2 and len(g.items) == 3 and g.status == "approved"
 
 # Rubric extraction: model draft is code-checked, problems reported, nothing saved
 bad = json.dumps({"rubric_id": "d", "question": "Q (4 marks)", "items": [
