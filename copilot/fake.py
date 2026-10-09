@@ -15,7 +15,7 @@ FAKE_TEXT = ("Newton's second law says force equals mass times acceleration, F =
 
 def fake_transcription(seed: str = "") -> Transcription:
     rng = random.Random(seed)
-    legibility = rng.choice(["good", "good", "good", "partial", "unreadable"])
+    legibility = rng.choice(["good", "good", "good", "partial"])
     return Transcription(legibility=legibility, text=FAKE_TEXT,
                          unclear_spans=["trolley"] if legibility == "partial" else [])
 

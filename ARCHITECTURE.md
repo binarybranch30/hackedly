@@ -56,7 +56,9 @@ flowchart TD
 
 ## 3. Folders
 ```
-app.py               Streamlit UI                      (Person B)
+webapp.py + views/   the website (multi-page Streamlit dashboard)
+ui/                  theme.py (look), components.py (shared page helpers)
+app.py               earlier single-page UI            (Person B)
 eval/run_eval.py     metrics → eval/results/           (Person B)
 copilot/
   schemas.py         data shapes — SHARED CONTRACT     (change only on main)

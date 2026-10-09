@@ -5,3 +5,9 @@ primaryColor = "#1E33F2"
 backgroundColor = "#F5F6FA"
 secondaryBackgroundColor = "#FFFFFF"
 textColor = "#24292D"
+
+[client]
+toolbarMode = "viewer"      # hide the developer "Deploy" menu
+
+[server]
+maxUploadSize = 25          # MB per photo

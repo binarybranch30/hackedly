@@ -44,7 +44,7 @@ pip install -r requirements.txt
 copy .env.example .env      &REM then put your GEMINI_API_KEY in .env
 ollama pull gemma4:e2b      &REM optional, for the local backend
 python scripts\smoke_test.py
-streamlit run app.py
+streamlit run webapp.py
 ```
 macOS/Linux: `python3 -m venv .venv && source .venv/bin/activate`, then the same commands.
 
@@ -54,6 +54,7 @@ macOS/Linux: `python3 -m venv .venv && source .venv/bin/activate`, then the same
 | `python scripts/smoke_test.py` | Quick end-to-end check (works with `MODEL_BACKEND=fake`) |
 | `python scripts/test_pipeline.py` | Offline tests of every failure path (no API key needed) |
 | `python scripts/gonogo.py a.jpg b.jpg c.jpg` | Try the real model on real handwriting |
+| `streamlit run webapp.py` | **The website**: dashboard, rubric, anchors, grading, review & approve, export, evaluation, audit log |
 | `streamlit run ui/preview.py` | Style preview of the dashboard theme |
 
 ## Evaluation
