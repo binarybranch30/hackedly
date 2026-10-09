@@ -104,6 +104,7 @@ Confidence is `high/medium/low` rather than a number, because numbers that LLMs 
 | `pipeline.grade_script(script, rubric, anchors, calibrated) -> ScriptGrade` | UI, eval |
 | `pipeline.grade_batch(scripts, rubric, anchors, calibrated, on_progress) -> (grades, drift)` | UI (Grade page) |
 | `pipeline.transcribe_image(path) -> Transcription` | UI (pre-fills the Anchors form) |
+| `pipeline.extract_rubric(image_path) -> (Rubric draft, problems)` / `pipeline.check_rubric(rubric) -> problems` | UI (Rubric page): teacher edits, then `store.save_rubric` |
 | `pipeline.drift_check(rubric, anchors, index) -> dict` | grade_batch every 5 scripts; UI may call it |
 | `pipeline.approve(script_id, edits)` (rejects marks not in `allowed_marks`) / `pipeline.export_csv(path)` | UI |
 | `store.*`, `audit.log/read_all` | anyone |

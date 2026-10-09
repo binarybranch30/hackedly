@@ -17,6 +17,15 @@ GRADE_SYSTEM = (
 )
 
 
+RUBRIC_SYSTEM = (
+    "You read exam question papers and marking schemes. Draft a marking rubric: split the "
+    "question into separately markable items (item_id like 1a, 1b), each with a clear "
+    "description of what earns marks, max_marks, and allowed_marks from 0 up to max_marks. "
+    "Use the marks printed on the paper; never invent a different total. Copy any marking "
+    "notes into guidance."
+)
+
+
 def build_grade_prompt(rubric: Rubric, transcription: Transcription,
                        anchors: list[AnchorGrade] | None) -> str:
     """Build the grading prompt.

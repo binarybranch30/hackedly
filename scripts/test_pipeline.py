@@ -94,4 +94,14 @@ except ValueError:
     pass
 g = pipeline.approve("clean", {"1a": 0})
 assert g.total == 2 and g.status == "approved"
+
+# Rubric extraction: model draft is code-checked, problems reported, nothing saved
+bad = json.dumps({"rubric_id": "d", "question": "Q (4 marks)", "items": [
+    {"item_id": "1a", "description": "Defines it", "max_marks": 2, "allowed_marks": [0, 1, 2], "guidance": ""},
+    {"item_id": "1a", "description": "", "max_marks": 2, "allowed_marks": [1, 3], "guidance": ""}]})
+fake_backend([bad])
+draft, problems = pipeline.extract_rubric(str(img))
+print("rubric problems:", problems)
+assert len(draft.items) == 2 and "duplicate item ids" in problems and len(problems) >= 4
+assert pipeline.check_rubric(rubric) == [], "example rubric should be valid"
 print("ALL PIPELINE TESTS PASSED")

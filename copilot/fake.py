@@ -6,7 +6,7 @@ import random
 import re
 
 from copilot.schemas import (FLAG_EVIDENCE_NOT_FOUND, FLAG_LOW_CONFIDENCE,
-                             GradedItem, ItemScore, ItemScores, Rubric,
+                             GradedItem, ItemScore, ItemScores, Rubric, RubricItem,
                              ScriptGrade, Transcription)
 
 FAKE_TEXT = ("Newton's second law says force equals mass times acceleration, F = ma. "
@@ -40,6 +40,12 @@ def fake_for_schema(schema, prompt: str):
     from markers like [item_id=1a] in the prompt."""
     if schema is Transcription:
         return fake_transcription(prompt[:50])
+    if schema is Rubric:
+        return Rubric(rubric_id="draft", question="Explain photosynthesis. (4 marks)", items=[
+            RubricItem(item_id="1a", description="Defines photosynthesis", max_marks=2,
+                       allowed_marks=[0, 1, 2], guidance=""),
+            RubricItem(item_id="1b", description="Gives the word equation", max_marks=2,
+                       allowed_marks=[0, 1, 2], guidance="")])
     if schema is ItemScores:
         ids = re.findall(r"\[item_id=([^\]]+)\]", prompt) or ["1"]
         return fake_item_scores(ids, prompt[:50])
