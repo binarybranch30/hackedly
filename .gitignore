@@ -1,0 +1,12 @@
+# secrets
+.env
+# python
+.venv/
+__pycache__/
+*.pyc
+# runtime output
+audit.jsonl
+eval/results/raw/
+*.log
+.streamlit/secrets.toml
+data/grades/

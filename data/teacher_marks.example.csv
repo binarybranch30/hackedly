@@ -1,0 +1,5 @@
+script_id,role,1a,1b,1c,total,teacher_says_hard
+S01,anchor,2,1,2,5,no
+S02,anchor,1,0,1,2,no
+S03,anchor,0,0,1,1,yes
+S04,heldout,,,,,

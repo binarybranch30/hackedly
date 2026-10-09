@@ -1,0 +1,9 @@
+{
+  "rubric_id": "example-physics-q1",
+  "question": "State Newton's second law of motion and explain it with one everyday example. (5 marks)",
+  "items": [
+    {"item_id": "1a", "description": "Correct statement of the law (F = ma, or force proportional to rate of change of momentum)", "max_marks": 2, "allowed_marks": [0, 1, 2], "guidance": "1 for the formula only, 2 for formula plus words"},
+    {"item_id": "1b", "description": "Explains what each quantity means (force, mass, acceleration)", "max_marks": 1, "allowed_marks": [0, 1], "guidance": ""},
+    {"item_id": "1c", "description": "Valid everyday example correctly linked to the law", "max_marks": 2, "allowed_marks": [0, 1, 2], "guidance": "1 for an example, 2 if it is explained using the law"}
+  ]
+}
