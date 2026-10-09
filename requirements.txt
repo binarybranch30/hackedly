@@ -4,3 +4,4 @@ pydantic
 streamlit
 python-dotenv
 pillow
+pypdfium2

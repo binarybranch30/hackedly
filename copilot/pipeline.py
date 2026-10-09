@@ -11,10 +11,10 @@ Functions for the UI / eval:
 import csv
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import queue
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from PIL import Image
 
 from copilot import audit, config, models, prompts, rules, store
 from copilot.fake import fake_script_grade
@@ -26,36 +26,51 @@ DRIFT_EVERY = 5        # run a drift check after every N scripts in a batch
 DRIFT_TOLERANCE = 1    # warn if a re-graded anchor is more than this many marks off
 
 
+# Live progress events (for the website's pipeline view).
+# on_event(script_id, step, status, detail): step is one of STEPS,
+# status is "running" | "ok" | "warn" | "fail".
+STEPS = ("check", "read", "grade", "verify")
+
+
 def grade_script(script: Script, rubric: Rubric,
                  anchors: list[AnchorGrade] | None = None,
-                 calibrated: bool = True) -> ScriptGrade:
+                 calibrated: bool = True, on_event=None) -> ScriptGrade:
     """Grade one script: image check -> transcribe -> grade x2 -> rules -> route.
 
     Never raises for model problems: they become flags so a batch never crashes.
     With MODEL_BACKEND=fake it returns a varied fake grade (for UI work).
     """
+    sid = script.script_id
+    emit = (lambda step, status, detail="": on_event(sid, step, status, detail)) if on_event else \
+        (lambda *a, **k: None)
     start, calls0 = time.perf_counter(), models.call_count()
     if config.MODEL_BACKEND == "fake":
-        grade = fake_script_grade(script.script_id, rubric)
+        for step in STEPS:
+            emit(step, "ok", "fake")
+        grade = fake_script_grade(sid, rubric)
         grade.calibrated = calibrated
         _finish(grade, "FAKE grade (MODEL_BACKEND=fake)", start, calls0)
         return grade
 
-    sid = script.script_id
     grade = ScriptGrade(script_id=sid, run_id=uuid.uuid4().hex[:8], backend=config.MODEL_BACKEND,
                         model=models.model_name(config.MODEL_BACKEND), calibrated=calibrated,
                         max_total=rubric.max_total)
     backends_used: set[str] = set()
 
     # 1. Image check (code)
+    emit("check", "running")
     problem = _image_problem(script.image_path)
     if problem:
+        emit("check", "fail", problem)
         grade.flags = [FLAG_UNREADABLE]
         _finish(grade, f"image check failed: {problem}", start, calls0)
         return grade
+    emit("check", "ok")
 
+    step = "read"
     try:
         # 2. Transcribe (Gemma vision)
+        emit("read", "running")
         t = models.generate_json(prompts.TRANSCRIBE_SYSTEM,
                                  "Transcribe this handwritten answer.",
                                  script.image_path, Transcription, script_id=sid)
@@ -65,26 +80,35 @@ def grade_script(script: Script, rubric: Rubric,
                              after=t.legibility, backend=models.last_backend_used(),
                              model=models.model_name(models.last_backend_used())))
         if t.legibility == "unreadable":
+            emit("read", "fail", "handwriting unreadable")
             grade.flags = [FLAG_UNREADABLE]
             _finish(grade, "model could not read the handwriting", start, calls0)
             return grade
+        emit("read", "warn" if t.legibility == "partial" else "ok", f"{len(t.text.split())} words")
 
         # 3. Grade twice (self-consistency)
+        step = "grade"
+        emit("grade", "running", "run 1 of 2")
         prompt = prompts.build_grade_prompt(rubric, t, anchors if calibrated else None)
         runs = []
-        for _ in range(2):
+        for n in range(2):
             scores = models.generate_json(prompts.GRADE_SYSTEM, prompt, script.image_path,
                                           ItemScores, script_id=sid)
             backends_used.add(models.last_backend_used())
             runs.append(rules.apply(rubric, scores, t))
+            if n == 0:
+                emit("grade", "running", "run 2 of 2")
     except Exception as e:  # ModelError, network errors, ... -> flag, never crash the batch
+        emit(step, "fail", type(e).__name__)
         grade.flags = sorted(set(grade.flags) | {FLAG_MODEL_ERROR})
         audit.log(AuditEntry(actor="system", action="error", script_id=sid, reason=str(e)[:300]))
         _finish(grade, f"model error: {type(e).__name__}", start, calls0)
         return grade
+    (items, total, flags), (_, total2, flags2) = runs
+    emit("grade", "ok" if total == total2 else "warn", f"runs: {total} and {total2}")
 
     # 4. Rules + routing (code)
-    (items, total, flags), (_, total2, flags2) = runs
+    emit("verify", "running")
     flags = set(flags) | set(flags2)
     if abs(total - total2) >= config.DISAGREE_THRESHOLD:
         flags.add(FLAG_RUNS_DISAGREE)
@@ -93,19 +117,20 @@ def grade_script(script: Script, rubric: Rubric,
         grade.backend = ",".join(sorted(backends_used))
         grade.model = ", ".join(models.model_name(b) for b in sorted(backends_used))
     grade.items, grade.total, grade.flags = items, total, sorted(flags)
+    found = sum(i.evidence_found for i in items if i.final_marks > 0)
+    marked = sum(1 for i in items if i.final_marks > 0)
+    emit("verify", "warn" if grade.flags else "ok", f"evidence {found}/{marked} found")
     _finish(grade, f"run totals {total} and {total2}", start, calls0)
     return grade
 
 
 def _image_problem(path: str) -> str | None:
-    """Return a reason if the image can't be used, else None."""
+    """Return a reason if the image/PDF can't be used, else None."""
     try:
-        with Image.open(path) as im:
-            im.verify()
-        with Image.open(path) as im:
-            w, h = im.size
+        im = models.load_image(path)
+        w, h = im.size
     except Exception as e:
-        return f"cannot open image ({type(e).__name__})"
+        return f"cannot open file ({type(e).__name__})"
     if min(w, h) < 300:
         return f"image too small ({w}x{h})"
     return None
@@ -127,24 +152,39 @@ def _finish(grade: ScriptGrade, reason: str, start: float, calls0: int) -> None:
 
 
 def grade_batch(scripts: list[Script], rubric: Rubric, anchors: list[AnchorGrade] | None = None,
-                calibrated: bool = True, on_progress=None) -> tuple[list[ScriptGrade], list[dict]]:
-    """Grade many scripts. Every DRIFT_EVERY scripts, re-grade one anchor (rotating)
-    to check the system still marks like the teacher.
+                calibrated: bool = True, on_progress=None,
+                on_event=None) -> tuple[list[ScriptGrade], list[dict]]:
+    """Grade many scripts in parallel. Every DRIFT_EVERY scripts, re-grade one anchor
+    (rotating) to check the system still marks like the teacher.
 
-    on_progress(done, total, grade) is called after each script (e.g. a progress bar).
-    Returns (grades, drift_results); see drift_check for the dict format.
+    on_progress(done, total, grade) is called after each script; on_event(script_id,
+    step, status, detail) for every step. Both run on the CALLER's thread (safe for
+    Streamlit). Returns (grades, drift_results); see drift_check for the dict format.
     """
+    events: queue.Queue = queue.Queue()
+    worker_event = (lambda *a: events.put(a)) if on_event else None
+
+    def drain():
+        while on_event and not events.empty():
+            on_event(*events.get_nowait())
+
     grades, drift = [], []
     workers = max(1, min(config.PARALLEL_SCRIPTS, len(scripts)))
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = [pool.submit(grade_script, s, rubric, anchors, calibrated) for s in scripts]
-        for n, fut in enumerate(as_completed(futures), 1):  # callbacks run on the caller's thread
-            g = fut.result()
-            grades.append(g)
-            if on_progress:
-                on_progress(n, len(scripts), g)
-            if calibrated and anchors and len(anchors) >= 2 and n % DRIFT_EVERY == 0:
-                drift.append(drift_check(rubric, anchors, index=(n // DRIFT_EVERY - 1) % len(anchors)))
+        pending = {pool.submit(grade_script, s, rubric, anchors, calibrated, worker_event)
+                   for s in scripts}
+        while pending:
+            done, pending = wait(pending, timeout=0.2, return_when=FIRST_COMPLETED)
+            drain()
+            for fut in done:
+                g = fut.result()
+                grades.append(g)
+                if on_progress:
+                    on_progress(len(grades), len(scripts), g)
+                n = len(grades)
+                if calibrated and anchors and len(anchors) >= 2 and n % DRIFT_EVERY == 0:
+                    drift.append(drift_check(rubric, anchors, index=(n // DRIFT_EVERY - 1) % len(anchors)))
+        drain()
     order = {s.script_id: i for i, s in enumerate(scripts)}
     return sorted(grades, key=lambda g: order.get(g.script_id, 0)), drift
 

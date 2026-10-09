@@ -122,17 +122,42 @@ def _call_with_backoff(backend, system, prompt, image_path, schema, script_id) -
         backend = nxt
 
 
-def prepare_image(image_path: str | Path) -> bytes:
-    """Load a photo, rotate it upright (phones store rotation in EXIF), convert to
-    RGB, shrink so the longest side <= MAX_IMAGE_SIDE, and return JPEG bytes.
-    Smaller uploads are faster and stay well under API request limits."""
+MAX_PDF_PAGES = 3  # answer sheets longer than this are cut (pages are stacked into one image)
+
+
+def load_image(path: str | Path):
+    """Open a photo or PDF as an upright RGB PIL image. PDF pages (up to
+    MAX_PDF_PAGES) are rendered and stacked top to bottom."""
     from PIL import Image, ImageOps
 
-    with Image.open(image_path) as im:
-        im = ImageOps.exif_transpose(im).convert("RGB")
-        im.thumbnail((MAX_IMAGE_SIDE, MAX_IMAGE_SIDE))
-        buf = io.BytesIO()
-        im.save(buf, format="JPEG", quality=90)
+    if str(path).lower().endswith(".pdf"):
+        import pypdfium2 as pdfium
+
+        pdf = pdfium.PdfDocument(str(path))
+        pages = []
+        for i in range(min(len(pdf), MAX_PDF_PAGES)):
+            w, h = pdf[i].get_size()
+            pages.append(pdf[i].render(scale=min(3.0, MAX_IMAGE_SIDE / max(w, h))).to_pil().convert("RGB"))
+        if not pages:
+            raise ValueError("PDF has no pages")
+        out = Image.new("RGB", (max(p.width for p in pages), sum(p.height for p in pages)), "white")
+        y = 0
+        for p in pages:
+            out.paste(p, (0, y))
+            y += p.height
+        return out
+    with Image.open(path) as im:
+        return ImageOps.exif_transpose(im).convert("RGB")
+
+
+def prepare_image(image_path: str | Path) -> bytes:
+    """Load a photo or PDF, rotate it upright (phones store rotation in EXIF),
+    shrink so the longest side <= MAX_IMAGE_SIDE, and return JPEG bytes.
+    Smaller uploads are faster and stay well under API request limits."""
+    im = load_image(image_path)
+    im.thumbnail((MAX_IMAGE_SIDE, MAX_IMAGE_SIDE))
+    buf = io.BytesIO()
+    im.save(buf, format="JPEG", quality=90)
     return buf.getvalue()
 
 

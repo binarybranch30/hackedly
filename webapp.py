@@ -12,28 +12,16 @@ st.set_page_config(page_title="Hackedly", page_icon=":material/grading:", layout
 theme.inject_css()
 st.logo("ui/logo.svg", size="large")
 
-pages = {
-    "Overview": [
-        st.Page("views/dashboard.py", title="Dashboard", icon=":material/dashboard:", default=True),
-    ],
-    "Set up": [
-        st.Page("views/rubric.py", title="Rubric", icon=":material/rule:"),
-        st.Page("views/anchors.py", title="Anchor scripts", icon=":material/anchor:"),
-    ],
-    "Grade": [
-        st.Page("views/grade.py", title="Grade scripts", icon=":material/upload_file:"),
-        st.Page("views/review.py", title="Review & approve", icon=":material/fact_check:"),
-        st.Page("views/export.py", title="Export", icon=":material/download:"),
-    ],
-    "Trust": [
-        st.Page("views/evaluation.py", title="Evaluation", icon=":material/monitoring:"),
-        st.Page("views/audit.py", title="Audit log", icon=":material/history:"),
-    ],
-}
+pages = [
+    st.Page("views/home.py", title="Home", icon=":material/home:", default=True),
+    st.Page("views/setup.py", title="Set up", icon=":material/tune:"),
+    st.Page("views/grade.py", title="Grade", icon=":material/play_circle:"),
+    st.Page("views/review.py", title="Review", icon=":material/fact_check:"),
+    st.Page("views/insights.py", title="Insights", icon=":material/insights:"),
+]
 page = st.navigation(pages)
 components.sidebar_status()
 if config.sample_mode():
-    st.info("**Sample class.** Prepared example answers and marks that show the whole workflow. They are "
-            "not live model output. New photos you upload here are graded by the real backend. "
-            "Switch off *Sample class* in the sidebar to return to your own data.", icon=":material/school:")
+    st.info("**Sample class** — prepared rubric, 3 teacher-graded anchors and 8 answer sheets. "
+            "Grading runs live with Gemma 4.", icon=":material/school:")
 page.run()

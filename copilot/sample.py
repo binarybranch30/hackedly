@@ -1,13 +1,12 @@
 """Sample class for demos (sample mode).
 
-Builds a separate workspace in data/sample/ with a rubric, 3 teacher anchors and
-8 handwritten-looking student answers that show every part of the workflow:
-clean scripts, an ambiguous answer, two grading runs that disagree, a quote the
-model made up, an unreadable photo, and teacher approvals with an edit.
+Builds a separate workspace in data/sample/ with what a teacher would have
+prepared BEFORE grading: a rubric, 3 anchor scripts the teacher graded by hand,
+and 8 handwritten answer sheets as PDFs. The answer sheets are NOT graded in
+advance: press "Grade" in the website and Gemma 4 reads and grades them live.
 
-The marks below are PREPARED EXAMPLES, not live model output. Every sample
-grade is labelled backend="sample". Totals and flags are still computed by the
-real rules code (rules.apply), exactly as for real grades.
+The sheets cover the interesting cases: strong, average, vague and partly
+legible answers, and one smudged, unreadable page.
 """
 import random
 import shutil
@@ -16,14 +15,10 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-from copilot import audit, config, pipeline, rules, store
-from copilot.schemas import (FLAG_RUNS_DISAGREE, FLAG_UNREADABLE, AnchorGrade, AuditEntry,
-                             ItemScore, ItemScores, Rubric, RubricItem, ScriptGrade,
-                             Transcription)
+from copilot import audit, config, store
+from copilot.schemas import AnchorGrade, AuditEntry, Rubric, RubricItem
 
 FONT = config.ROOT / "assets" / "fonts" / "Caveat.ttf"
-SAMPLE_BACKEND = "sample"
-SAMPLE_MODEL = "sample data (prepared example)"
 
 RUBRIC = Rubric(
     rubric_id="physics-class9-newton2",
@@ -56,68 +51,26 @@ ANCHORS = [
 ]
 
 
-def _s(item_id, marks, quote, reasoning, confidence="high"):
-    return ItemScore(item_id=item_id, marks_awarded=marks, evidence_quote=quote, reasoning=reasoning,
-                     confidence=confidence)
-
-
-# (script_id, legibility, text, unclear_spans, run-1 scores, run-2 total or None, teacher edits or None)
+# (script_id, answer text, messy?) -- rendered as handwritten PDF answer sheets
 STUDENTS = [
-    ("R01", "good",
-     "Newton's second law states that the force acting on a body is equal to its mass multiplied by its "
-     "acceleration, F = ma. Here F is force in newtons, m is mass in kg and a is acceleration. When we kick a "
-     "football and a heavy medicine ball with the same force, the heavy ball moves slower because it has more "
-     "mass, so its acceleration a = F/m is smaller.", [],
-     [_s("1a", 2, "force acting on a body is equal to its mass multiplied by its acceleration, F = ma",
-         "Formula and correct statement."),
-      _s("1b", 1, "F is force in newtons, m is mass in kg and a is acceleration", "All three explained."),
-      _s("1c", 2, "the heavy ball moves slower because it has more mass, so its acceleration a = F/m is smaller",
-         "Example explained with the law.")], None, None),
-    ("R02", "good",
-     "F = ma. Force equals mass into acceleration. When a car applies brakes it slows down and stops.", [],
-     [_s("1a", 2, "F = ma. Force equals mass into acceleration", "Formula with words."),
-      _s("1b", 0, "", "Quantities not explained."),
-      _s("1c", 1, "When a car applies brakes it slows down", "Example given but not linked to F = ma.",
-         "medium")], None, {}),
-    ("R03", "good",
-     "The law says that things move faster when you push them harder. Like when you push a swing hard "
-     "it goes higher.", [],
-     [_s("1a", 1, "things move faster when you push them harder",
-         "Hints that more force gives more acceleration, but no formula and 'faster' mixes up speed and "
-         "acceleration.", "low"),
-      _s("1b", 0, "", "No quantities named."),
-      _s("1c", 1, "push a swing hard it goes higher", "Example present, link to the law is weak.", "low")],
-     None, None),
-    ("R04", "good",
-     "Force = mass x acceleration (F=ma). A rocket pushes gas down with a big force so it accelerates up. "
-     "Bigger rockets need more force.", [],
-     [_s("1a", 2, "Force = mass x acceleration (F=ma)", "Formula with words."),
-      _s("1b", 0, "", "Symbols not explained individually.", "medium"),
-      _s("1c", 2, "Bigger rockets need more force", "Example linked: more mass needs more force.", "medium")],
-     3, None),
-    ("R05", "good",
-     "Newtons 2nd law: F = ma. The force on an object makes it accelerate. For example pushing a bicycle "
-     "makes it go.", [],
-     [_s("1a", 2, "force is the rate of change of momentum", "Correct statement of the law."),
-      _s("1b", 0, "", "Quantities not explained."),
-      _s("1c", 1, "pushing a bicycle makes it go", "Example given, not explained.", "medium")], None, None),
-    ("R06", "unreadable", "", [], None, None, None),
-    ("R07", "partial",
-     "Second law: the acceleration of a body is directly proportional to the force [?] and inversely "
-     "proportional to its mass, so F = ma. a is acceleration, m is mass, F is the net force. Example: a "
-     "[?] truck needs more force than a bike to speed up equally.", ["empty", "loaded"],
-     [_s("1a", 2, "acceleration of a body is directly proportional to the force", "Correct statement."),
-      _s("1b", 1, "a is acceleration, m is mass, F is the net force", "All three explained."),
-      _s("1c", 2, "truck needs more force than a bike to speed up equally", "Example linked to mass.",
-         "medium")], None, None),
-    ("R08", "good",
-     "Newton's second law: F = ma, the net force equals mass times acceleration. F is force, m is mass and a "
-     "is acceleration. If two people push a car instead of one, the car accelerates more because the force "
-     "is bigger.", [],
-     [_s("1a", 2, "F = ma, the net force equals mass times acceleration", "Formula and statement."),
-      _s("1b", 1, "F is force, m is mass and a is acceleration", "All three explained."),
-      _s("1c", 1, "two people push a car instead of one, the car accelerates more",
-         "Example given; the link to the law could be clearer.", "medium")], None, {"1c": 2}),
+    ("R01", "Newton's second law states that the force acting on a body is equal to its mass multiplied by its "
+            "acceleration, F = ma. Here F is force in newtons, m is mass in kg and a is acceleration. When we "
+            "kick a football and a heavy medicine ball with the same force, the heavy ball moves slower because "
+            "it has more mass, so its acceleration a = F/m is smaller.", False),
+    ("R02", "F = ma. Force equals mass into acceleration. When a car applies brakes it slows down and stops.", False),
+    ("R03", "The law says that things move faster when you push them harder. Like when you push a swing hard "
+            "it goes higher.", False),
+    ("R04", "Force = mass x acceleration (F=ma). A rocket pushes gas down with a big force so it accelerates up. "
+            "Bigger rockets need more force.", False),
+    ("R05", "Newtons 2nd law: F = ma. The force on an object makes it accelerate. For example pushing a bicycle "
+            "makes it go.", False),
+    ("R06", "", True),
+    ("R07", "Second law: the acceleration of a body is directly proportional to the force and inversely "
+            "proportional to its mass, so F = ma. a is acceleration, m is mass, F is the net force. Example: "
+            "a loaded truck needs more force than a bike to speed up equally.", False),
+    ("R08", "Newton's second law: F = ma, the net force equals mass times acceleration. F is force, m is mass "
+            "and a is acceleration. If two people push a car instead of one, the car accelerates more because "
+            "the force is bigger.", False),
 ]
 
 
@@ -151,63 +104,40 @@ def _handwriting(text: str, out: Path, header: str, messy: bool = False, seed: i
     else:
         im = im.rotate(rng.uniform(-1.2, 1.2), fillcolor=(240, 238, 230), resample=Image.BICUBIC)
     out.parent.mkdir(parents=True, exist_ok=True)
-    im.save(out, quality=88)
-
-
-def _log(action, script_id, reason, **kw):
-    audit.log(AuditEntry(actor=kw.pop("actor", "system"), action=action, script_id=script_id,
-                         reason=f"[sample] {reason}", backend=SAMPLE_BACKEND, model=SAMPLE_MODEL, **kw))
+    if out.suffix == ".pdf":
+        im.save(out, "PDF", resolution=100)  # like a scanned answer sheet
+    else:
+        im.save(out, quality=88)
 
 
 def build() -> None:
-    """(Re)create the sample workspace in data/sample/. Requires sample mode to be on."""
+    """(Re)create the sample workspace in data/sample/. Requires sample mode to be on.
+    Prepares rubric + teacher-graded anchors + UNGRADED answer-sheet PDFs."""
     if not config.sample_mode():
         raise RuntimeError("turn sample mode on first")
     shutil.rmtree(config.SAMPLE_DIR, ignore_errors=True)
     ws = config.SAMPLE_DIR
     store.save_rubric(RUBRIC)
-    _log("edit", "rubric", "rubric saved", actor="teacher", after="3 items, 5 marks")
     store.save_anchors(ANCHORS)
     for n, a in enumerate(ANCHORS):
         _handwriting(a.transcription, ws / "anchors" / f"{a.script_id}.jpg", f"Anchor {a.script_id} · Q1", seed=n)
-    _log("edit", "anchors", "3 anchors graded by the teacher", actor="teacher",
-         after=", ".join(f"{a.script_id}={sum(a.marks.values())}" for a in ANCHORS))
+    for n, (sid, text, messy) in enumerate(STUDENTS):
+        _handwriting(text, ws / "scripts" / f"{sid}.pdf", f"Roll no. {sid} · Q1", messy=messy, seed=100 + n)
+    audit.log(AuditEntry(actor="teacher", action="edit", script_id="setup",
+                         after=f"rubric {RUBRIC.rubric_id}; anchors " +
+                               ", ".join(f"{a.script_id}={sum(a.marks.values())}" for a in ANCHORS),
+                         reason="[sample] rubric and 3 anchor scripts prepared by the teacher"))
 
-    for n, (sid, leg, text, unclear, scores, run2_total, edits) in enumerate(STUDENTS):
-        _handwriting(text, ws / "scripts" / f"{sid}.jpg", f"Roll no. {sid} · Q1", messy=leg == "unreadable",
-                     seed=100 + n)
-        t = Transcription(legibility=leg, text=text, unclear_spans=unclear)
-        g = ScriptGrade(script_id=sid, run_id=f"sample-{sid}", backend=SAMPLE_BACKEND, model=SAMPLE_MODEL,
-                        calibrated=True, transcription=t, max_total=RUBRIC.max_total)
-        _log("transcribe", sid, "photo read", after=leg)
-        if leg == "unreadable":
-            g.flags = [FLAG_UNREADABLE]
-        else:
-            if sid == "R05":
-                _log("retry", sid, "attempt 1: invalid ItemScores (missing field 'confidence'); asked again")
-            items, total, flags = rules.apply(RUBRIC, ItemScores(items=scores), t)
-            if run2_total is not None and abs(run2_total - total) >= config.DISAGREE_THRESHOLD:
-                flags = sorted(set(flags) | {FLAG_RUNS_DISAGREE})
-            g.items, g.total, g.flags = items, total, flags
-        g.status = "needs_review" if g.flags else "auto_ok"
-        store.save_grade(g)
-        _log("grade", sid, "graded (run totals "
-             + (f"{g.total} and {run2_total})" if run2_total is not None else f"{g.total} and {g.total})"),
-             after=f"{g.total}/{g.max_total}")
-        if g.flags:
-            _log("flag", sid, "sent to teacher review", after=",".join(g.flags))
-        if sid == "R05":
-            a = ANCHORS[1]
-            _log("drift_check", a.script_id, "ok", before=str(sum(a.marks.values())),
-                 after=str(sum(a.marks.values())))
-        if edits is not None:
-            pipeline.approve(sid, edits, teacher="[sample] teacher")
+
+def answer_sheets() -> list[Path]:
+    """The sample answer-sheet PDFs waiting to be graded."""
+    return sorted((config.SAMPLE_DIR / "scripts").glob("*.pdf"))
 
 
 def enable() -> None:
     """Switch to the sample workspace, building it the first time."""
     config.SAMPLE_FLAG.touch()
-    if not (config.SAMPLE_DIR / "grades").exists():
+    if not store.rubric_path().exists():
         build()
 
 

@@ -124,4 +124,22 @@ grades, _ = pipeline.grade_batch([Script(script_id=f"P{i}", image_path=str(img))
 assert [g.script_id for g in grades] == [f"P{i}" for i in range(6)], "results keep input order"
 assert all(g.total == 4 and g.model_calls == 3 for g in grades), [(g.total, g.model_calls) for g in grades]
 print("parallel batch OK")
+
+# Live step events arrive on the caller's thread, in order per script
+seen_events = []
+grades, _ = pipeline.grade_batch([Script(script_id="E1", image_path=str(img))], rubric, [],
+                                 on_event=lambda sid, step, status, detail: seen_events.append((step, status)))
+assert [e for e in seen_events if e[1] != "running"] == [("check", "ok"), ("read", "ok"), ("grade", "ok"),
+                                                         ("verify", "ok")], seen_events
+print("events OK:", seen_events)
+
+# A 2-page PDF answer sheet is rendered, stacked and accepted
+pdf = tmp / "sheet.pdf"
+pages = [Image.new("RGB", (800, 1000), "white"), Image.new("RGB", (800, 1000), "white")]
+pages[0].save(pdf, save_all=True, append_images=pages[1:])
+w, h = models.load_image(pdf).size
+assert h == 2 * round(w * 1000 / 800), (w, h)  # two pages stacked
+g = pipeline.grade_script(Script(script_id="PDF1", image_path=str(pdf)), rubric, [])
+assert g.total == 4 and not g.flags, g.flags
+print("pdf OK")
 print("ALL PIPELINE TESTS PASSED")
