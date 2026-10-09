@@ -4,12 +4,21 @@ import statistics
 
 import streamlit as st
 
-from copilot import store
+from copilot import config, store
 from ui import board
 from ui import components as c
 from ui import theme
 
 c.show_flash()
+if not config.sample_mode() and not config.active_assessment():
+    st.markdown(f"<div class='ag-eyebrow'>{theme.html.escape(c.workspace_label())}</div>"
+                "<div class='ag-title' style='font-size:2.75rem'>Handwritten answers in.<br>Graded marks out.</div>"
+                "<div class='ag-subtitle' style='font-size:1.08rem;margin-top:1rem'>Start by creating an "
+                "assessment for your class, or switch on <b>Sample class</b> in the sidebar to try a "
+                "prepared example.</div>", unsafe_allow_html=True)
+    if st.button("Create an assessment", type="primary", icon=":material/add:"):
+        st.switch_page("views/setup.py")
+    st.stop()
 rubric = store.load_rubric()
 anchors = store.load_anchors()
 grades = store.load_grades()
@@ -61,7 +70,7 @@ def hero_card() -> str:
 
 left, right = st.columns([6, 5], gap="large", vertical_alignment="center")
 with left:
-    st.markdown("<div class='ag-eyebrow'>Gemma 4 grading copilot</div>"
+    st.markdown(f"<div class='ag-eyebrow'>{theme.html.escape(c.workspace_label())}</div>"
                 "<div class='ag-title' style='font-size:2.75rem'>Handwritten answers in.<br>Graded marks out.</div>"
                 "<div class='ag-subtitle' style='font-size:1.08rem;margin-top:1rem'>Upload scanned answer sheets. "
                 "Gemma 4 reads them and marks each question against your rubric, quoting the evidence for every "

@@ -5,7 +5,8 @@ from ui import components as c
 from ui import theme
 from ui.sections import export
 
-theme.page_header("Review", "Check the evidence, adjust any mark, approve. Only approved sheets are released.")
+theme.page_header("Review", "Check the evidence, adjust any mark, approve. Only approved sheets are released.",
+                  eyebrow=c.workspace_label())
 c.show_flash()
 
 rubric = store.load_rubric()
@@ -45,7 +46,7 @@ if n1.button("", icon=":material/chevron_left:", disabled=idx == 0, width="stret
     st.session_state["review_pick"] = ids[idx - 1]
     st.rerun()
 n2.selectbox("Sheet", ids, key="review_pick", label_visibility="collapsed",
-             format_func=lambda s: f"{s}  ·  {by_id[s].total}/{by_id[s].max_total}  ·  "
+             format_func=lambda s: f"{c.student_label(s)}  ·  {by_id[s].total}/{by_id[s].max_total}  ·  "
                                    f"{c.STATUS_LABEL[by_id[s].status]}  ({ids.index(s) + 1} of {len(ids)})")
 if n3.button("", icon=":material/chevron_right:", disabled=idx == len(ids) - 1, width="stretch", help="Next"):
     st.session_state["review_pick"] = ids[idx + 1]
@@ -67,6 +68,8 @@ with photo_col:
 with work_col:
     h1, h2 = st.columns([1, 1], vertical_alignment="center")
     h1.markdown(f"## {g.script_id} &nbsp;·&nbsp; {g.total}/{g.max_total}")
+    if store.student_names().get(g.script_id):
+        h1.caption(store.student_names()[g.script_id])
     with h2:
         c.status_badge(g.status)
     if g.flags:

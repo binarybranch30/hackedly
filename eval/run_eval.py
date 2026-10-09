@@ -91,9 +91,9 @@ def save_raw(results_root: Path, setting: str, script_id: str, run: int, grade: 
 
 
 def grade_once(script_id: str, rubric, anchors, calibrated: bool) -> ScriptGrade:
-    image_path = next((str(path) for ext in ("jpg", "jpeg", "png")
-                       if (path := config.DATA_DIR / "scripts" / f"{script_id}.{ext}").exists()),
-                      str(config.DATA_DIR / "scripts" / f"{script_id}.jpg"))
+    image_path = next((str(path) for ext in ("jpg", "jpeg", "png", "pdf")
+                       if (path := config.workspace() / "scripts" / f"{script_id}.{ext}").exists()),
+                      str(config.workspace() / "scripts" / f"{script_id}.jpg"))
     return pipeline.grade_script(Script(script_id=script_id, image_path=image_path, role="heldout"),
                                  rubric, anchors=anchors, calibrated=calibrated)
 
@@ -118,7 +118,8 @@ def main() -> None:
         parser.error("--limit must be at least 1")
 
     rubric = store.load_rubric()
-    teacher = load_teacher_marks(config.DATA_DIR / "teacher_marks.csv")
+    marks_file = config.workspace() / "teacher_marks.csv"  # per assessment; data/ as fallback
+    teacher = load_teacher_marks(marks_file if marks_file.exists() else config.DATA_DIR / "teacher_marks.csv")
     heldout_ids = [script_id for script_id, record in teacher.items() if record["role"] == "heldout"]
     if args.limit:
         heldout_ids = heldout_ids[:args.limit]

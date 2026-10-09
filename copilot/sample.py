@@ -115,8 +115,8 @@ def build() -> None:
     Prepares rubric + teacher-graded anchors + UNGRADED answer-sheet PDFs."""
     if not config.sample_mode():
         raise RuntimeError("turn sample mode on first")
-    shutil.rmtree(config.SAMPLE_DIR, ignore_errors=True)
-    ws = config.SAMPLE_DIR
+    shutil.rmtree(config.sample_dir(), ignore_errors=True)
+    ws = config.sample_dir()
     store.save_rubric(RUBRIC)
     store.save_anchors(ANCHORS)
     for n, a in enumerate(ANCHORS):
@@ -131,15 +131,15 @@ def build() -> None:
 
 def answer_sheets() -> list[Path]:
     """The sample answer-sheet PDFs waiting to be graded."""
-    return sorted((config.SAMPLE_DIR / "scripts").glob("*.pdf"))
+    return sorted((config.sample_dir() / "scripts").glob("*.pdf"))
 
 
 def enable() -> None:
     """Switch to the sample workspace, building it the first time."""
-    config.SAMPLE_FLAG.touch()
+    config.sample_flag().touch()
     if not store.rubric_path().exists():
         build()
 
 
 def disable() -> None:
-    config.SAMPLE_FLAG.unlink(missing_ok=True)
+    config.sample_flag().unlink(missing_ok=True)

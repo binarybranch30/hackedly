@@ -51,11 +51,22 @@ streamlit run webapp.py
 ```
 macOS/Linux: `python3 -m venv .venv && source .venv/bin/activate`, then the same commands.
 
+## Use it with your own class
+1. **Set up → Create an assessment** (name, class, subject). Each assessment keeps its own rubric, students, sheets, marks and audit log; switch between them in the sidebar.
+2. **Students:** type the class list or import a CSV with roll number and name columns.
+3. **Rubric:** one row per markable point, as many as you need. Leave *Allowed marks* blank for 0 to max. Or draft it from a photo of the question paper.
+4. **Anchor scripts:** grade a few answers yourself (3 recommended) so Gemma 4 learns your strictness.
+5. **Grade:** upload photos or PDFs (one student per file). Name files by roll number, or match files like `IMG_2034.jpg` to students on the page, then press *Grade*.
+6. **Review:** check evidence, change marks, approve, or send unreadable sheets to the rescan list. **Export** gives the released marks with student names.
+
+Student data stays on the server in `data/assessments/` and is git-ignored.
+
 ## Useful scripts
 | Command | What it does |
 |---|---|
 | `python scripts/smoke_test.py` | Quick end-to-end check (works with `MODEL_BACKEND=fake`) |
 | `python scripts/test_pipeline.py` | Offline tests of every failure path (no API key needed) |
+| `python scripts/test_assessments.py` | Offline tests for assessments, class lists and exports |
 | `python scripts/gonogo.py a.jpg b.jpg c.jpg` | Try the real model on real handwriting |
 | `streamlit run webapp.py` | **The website**: dashboard, rubric, anchors, grading, review & approve, export, evaluation, audit log |
 | `streamlit run ui/preview.py` | Style preview of the dashboard theme |

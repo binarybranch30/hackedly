@@ -1,5 +1,7 @@
 """Simple file storage: JSON files in the active workspace (data/, or data/sample/
 in sample mode). Shared by UI and pipeline."""
+import csv
+import io
 import json
 from pathlib import Path
 
@@ -20,8 +22,13 @@ def grades_dir() -> Path:
 
 
 def load_rubric() -> Rubric:
-    path = rubric_path() if rubric_path().exists() else config.DATA_DIR / "rubric.example.json"
-    return Rubric.model_validate_json(path.read_text(encoding="utf-8"))
+    """The workspace's rubric. A new assessment starts with an EMPTY rubric; only the
+    default data/ workspace falls back to the example rubric."""
+    if rubric_path().exists():
+        return Rubric.model_validate_json(rubric_path().read_text(encoding="utf-8"))
+    if config.workspace() == config.DATA_DIR:
+        return Rubric.model_validate_json((config.DATA_DIR / "rubric.example.json").read_text(encoding="utf-8"))
+    return Rubric(rubric_id=config.workspace().name, question="", items=[])
 
 
 def save_rubric(rubric: Rubric) -> None:
@@ -46,6 +53,49 @@ def save_grade(grade: ScriptGrade) -> None:
     grades_dir().mkdir(parents=True, exist_ok=True)
     (grades_dir() / f"{grade.script_id}.json").write_text(grade.model_dump_json(indent=2),
                                                           encoding="utf-8")
+
+
+def roster_path() -> Path:
+    return config.workspace() / "roster.csv"
+
+
+def load_roster() -> list[dict]:
+    """Students in this class: [{"roll_no": "R01", "name": "Asha"}]. Empty if none."""
+    if not roster_path().exists():
+        return []
+    with open(roster_path(), newline="", encoding="utf-8") as f:
+        return [{"roll_no": r.get("roll_no", "").strip(), "name": r.get("name", "").strip()}
+                for r in csv.DictReader(f) if r.get("roll_no", "").strip()]
+
+
+def save_roster(rows: list[dict]) -> None:
+    roster_path().parent.mkdir(parents=True, exist_ok=True)
+    with open(roster_path(), "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=["roll_no", "name"])
+        w.writeheader()
+        for r in rows:
+            w.writerow({"roll_no": r["roll_no"], "name": r.get("name", "")})
+
+
+def parse_roster_csv(data: bytes) -> list[dict]:
+    """Read an uploaded class list. Accepts headers like roll_no/roll/id and name/student."""
+    text = data.decode("utf-8-sig", errors="replace")
+    reader = csv.DictReader(io.StringIO(text))
+    def key(c: str) -> str:  # "Roll No." / "roll_no" / "ROLL-NO" -> "rollno"
+        return "".join(ch for ch in c.lower() if ch.isalnum())
+
+    cols = {key(c): c for c in (reader.fieldnames or [])}
+    roll = next((cols[k] for k in ("rollno", "roll", "rollnumber", "id", "studentid", "admissionno")
+                 if k in cols), None)
+    name = next((cols[k] for k in ("name", "student", "studentname", "fullname") if k in cols), None)
+    if roll is None:
+        raise ValueError("The CSV needs a roll number column (roll_no, roll, id or student_id).")
+    return [{"roll_no": r[roll].strip(), "name": (r.get(name) or "").strip() if name else ""}
+            for r in reader if (r.get(roll) or "").strip()]
+
+
+def student_names() -> dict[str, str]:
+    return {r["roll_no"]: r["name"] for r in load_roster()}
 
 
 def load_grades() -> list[ScriptGrade]:

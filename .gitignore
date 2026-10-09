@@ -14,3 +14,6 @@ data/sample/
 data/.sample_mode
 data/question_papers/
 data/backups/
+# real classes: student names, answer sheets and marks never go into git
+data/assessments/
+data/.active_assessment

@@ -138,7 +138,23 @@ def sidebar_status() -> None:
     """Compact sidebar footer: sample-class switch + which model is grading."""
     from copilot import sample  # local import: only the website needs it
 
+    from copilot import assessments
+
     with st.sidebar:
+        if not config.sample_mode():
+            items = assessments.list_all()
+            if items:
+                slugs = [m["slug"] for m in items]
+                active = config.active_assessment()
+                pick = st.selectbox("Assessment", slugs, index=slugs.index(active) if active in slugs else None,
+                                    format_func=lambda s: assessments.label(next(m for m in items if m["slug"] == s)),
+                                    placeholder="Choose an assessment")
+                if pick and pick != active:
+                    assessments.activate(pick)
+                    st.session_state.pop("last_run", None)
+                    st.rerun()
+            st.page_link("views/setup.py", label="New assessment" if items else "Create an assessment",
+                         icon=":material/add:")
         on = st.toggle("Sample class", value=config.sample_mode(),
                        help="A prepared class (rubric, 3 graded anchors, 8 answer-sheet PDFs) for demos. "
                             "The sheets are graded live. Your own data is kept separately.")
@@ -159,6 +175,21 @@ def sidebar_status() -> None:
             st.caption(":red[:material/key_off:] GEMINI_API_KEY missing in .env")
         else:
             st.caption(f":green[:material/circle:] Grading with **{model_label()}**")
+
+
+def workspace_label() -> str:
+    """Short name of what is open: the sample class or the active assessment."""
+    from copilot import assessments
+
+    if config.sample_mode():
+        return "Sample class"
+    meta = assessments.get(config.active_assessment()) if config.active_assessment() else None
+    return assessments.label(meta) if meta else "No assessment selected"
+
+
+def student_label(script_id: str) -> str:
+    name = store.student_names().get(script_id, "")
+    return f"{script_id} · {name}" if name else script_id
 
 
 def drift_entries(limit: int = 5):
