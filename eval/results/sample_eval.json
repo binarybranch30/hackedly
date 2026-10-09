@@ -1,0 +1,80 @@
+{
+  "model": [
+    "gemma-4-26b-a4b-it"
+  ],
+  "sheets": 8,
+  "runs_calibrated": 3,
+  "reading_word_accuracy_pct": 93.4,
+  "reading_word_accuracy_min_pct": 76.5,
+  "unreadable_flagged": "3/3",
+  "evidence_found_pct": 100,
+  "consistency_identical_pct": 100,
+  "consistency_mean_range": 0,
+  "marks_vs_reference_key": {
+    "calibrated": {
+      "n": 21,
+      "mae_total": 0.14,
+      "exact_total_pct": 86,
+      "within_1_pct": 100,
+      "item_agreement_pct": 95
+    },
+    "uncalibrated": {
+      "n": 7,
+      "mae_total": 0.14,
+      "exact_total_pct": 86,
+      "within_1_pct": 100,
+      "item_agreement_pct": 95
+    }
+  },
+  "flagged_for_review_pct": 12,
+  "fallback_used": 0,
+  "seconds_per_sheet": 21.6,
+  "model_calls_per_sheet": 3.2,
+  "per_sheet_totals": {
+    "R01": [
+      5,
+      5,
+      5
+    ],
+    "R02": [
+      3,
+      3,
+      3
+    ],
+    "R03": [
+      1,
+      1,
+      1
+    ],
+    "R04": [
+      4,
+      4,
+      4
+    ],
+    "R05": [
+      3,
+      3,
+      3
+    ],
+    "R07": [
+      5,
+      5,
+      5
+    ],
+    "R08": [
+      5,
+      5,
+      5
+    ]
+  },
+  "reference_totals": {
+    "R01": 5,
+    "R02": 3,
+    "R03": 2,
+    "R04": 4,
+    "R05": 3,
+    "R07": 5,
+    "R08": 5
+  },
+  "caveat": "8 synthetic sheets in a handwriting font, 1 question; reference key written by the team, not a teacher. Indicative only."
+}
