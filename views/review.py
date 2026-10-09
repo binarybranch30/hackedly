@@ -60,8 +60,9 @@ with head:
             bits.append(f"{g.seconds:.1f}s · {g.model_calls} model calls")
         bits.append("calibrated with anchors" if g.calibrated else "rubric only")
         st.caption(" · ".join(bits))
-    if g.backend not in (config.MODEL_BACKEND, "fake"):
-        st.warning("Part of this script was graded by the local fallback model.", icon=":material/swap_horiz:")
+    if "FALLBACK_USED" in g.flags:
+        st.warning(f"The main model was overloaded, so part of this script was graded by a fallback "
+                   f"model ({g.model}).", icon=":material/swap_horiz:")
 
 img_col, txt_col = st.columns(2, gap="medium")
 with img_col:
