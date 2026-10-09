@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from PIL import Image  # noqa: E402
 
 from copilot import config, models, pipeline, store  # noqa: E402
-from copilot.schemas import Script  # noqa: E402
+from copilot.schemas import AnchorGrade, Script  # noqa: E402
 
 config.MODEL_BACKEND = "gemini"
 config.BACKOFF_SECONDS = [0]
@@ -68,4 +68,30 @@ g = run("rate_limit", [T_OK, models.RateLimited("429"), models.RateLimited("429"
 assert "FALLBACK_USED" in g.flags
 g = run("always_bad", [T_OK] + ["{}"] * 3)
 assert "MODEL_ERROR" in g.flags
+
+# Batch + drift check: 5 scripts, then one anchor re-graded (leave-one-out)
+anchors = [AnchorGrade(script_id=f"A{i}", transcription=TEXT, marks={"1a": 2, "1b": 1, "1c": 2})
+           for i in range(3)]
+seen = []
+fake_backend([T_OK, scores(2), scores(2)] * 5 + [scores(0, quote="")])
+grades, drift = pipeline.grade_batch([Script(script_id=f"B{i}", image_path=str(img)) for i in range(5)],
+                                     rubric, anchors, on_progress=lambda d, n, g: seen.append(d))
+print("batch", [g.total for g in grades], "progress", seen, "drift", drift)
+assert seen == [1, 2, 3, 4, 5] and len(drift) == 1 and drift[0]["drifted"] and drift[0]["diff"] == -3
+
+# Anchor transcription helper
+fake_backend([T_OK])
+assert pipeline.transcribe_image(str(img)).text == TEXT
+try:
+    pipeline.transcribe_image(str(tiny)); raise AssertionError("tiny image should fail")
+except ValueError:
+    pass
+
+# Teacher approval: illegal mark rejected, legal edit recomputes total
+try:
+    pipeline.approve("clean", {"1b": 5}); raise AssertionError("illegal mark accepted")
+except ValueError:
+    pass
+g = pipeline.approve("clean", {"1a": 0})
+assert g.total == 2 and g.status == "approved"
 print("ALL PIPELINE TESTS PASSED")

@@ -1,8 +1,11 @@
 """The grading workflow. The UI and the eval call ONLY functions in this file.
 
-grade_script  -> OWNER: Person A (the AI steps)
-
-approve / export_csv -> plumbing, already written; both may use them.
+Functions for the UI / eval:
+  grade_script(script, rubric, anchors, calibrated) -> ScriptGrade   one script
+  grade_batch(scripts, rubric, anchors, on_progress) -> (grades, drift_results)
+  transcribe_image(image_path) -> Transcription      pre-fill the Anchors form
+  drift_check(rubric, anchors, index) -> dict         re-grade one anchor
+  approve(script_id, edits) / export_csv(path)        teacher approval + release
 """
 import csv
 import uuid
@@ -15,6 +18,9 @@ from copilot.fake import fake_script_grade
 from copilot.schemas import (FLAG_FALLBACK_USED, FLAG_MODEL_ERROR, FLAG_RUNS_DISAGREE,
                              FLAG_UNREADABLE, AnchorGrade, AuditEntry, ItemScores, Rubric,
                              Script, ScriptGrade, Transcription)
+
+DRIFT_EVERY = 5        # run a drift check after every N scripts in a batch
+DRIFT_TOLERANCE = 1    # warn if a re-graded anchor is more than this many marks off
 
 
 def grade_script(script: Script, rubric: Rubric,
@@ -112,10 +118,72 @@ def _finish(grade: ScriptGrade, reason: str) -> None:
                              after=",".join(grade.flags), reason="sent to teacher review"))
 
 
+def grade_batch(scripts: list[Script], rubric: Rubric, anchors: list[AnchorGrade] | None = None,
+                calibrated: bool = True, on_progress=None) -> tuple[list[ScriptGrade], list[dict]]:
+    """Grade many scripts. Every DRIFT_EVERY scripts, re-grade one anchor (rotating)
+    to check the system still marks like the teacher.
+
+    on_progress(done, total, grade) is called after each script (e.g. a progress bar).
+    Returns (grades, drift_results); see drift_check for the dict format.
+    """
+    grades, drift = [], []
+    for n, script in enumerate(scripts, 1):
+        g = grade_script(script, rubric, anchors, calibrated)
+        grades.append(g)
+        if on_progress:
+            on_progress(n, len(scripts), g)
+        if calibrated and anchors and len(anchors) >= 2 and n % DRIFT_EVERY == 0:
+            drift.append(drift_check(rubric, anchors, index=(n // DRIFT_EVERY - 1) % len(anchors)))
+    return grades, drift
+
+
+def transcribe_image(image_path: str) -> Transcription:
+    """Transcribe one image (used to pre-fill the anchor form; the teacher corrects it).
+    Raises ValueError for unusable images and ModelError if the model fails."""
+    problem = _image_problem(image_path)
+    if problem:
+        raise ValueError(problem)
+    return models.generate_json(prompts.TRANSCRIBE_SYSTEM, "Transcribe this handwritten answer.",
+                                image_path, Transcription)
+
+
+def drift_check(rubric: Rubric, anchors: list[AnchorGrade], index: int = 0) -> dict:
+    """Re-grade anchor `index` from its text, using the OTHER anchors as examples
+    (leave-one-out, so the model can't just copy the answer). Compares with the
+    teacher's marks.
+
+    Returns {"anchor_id", "teacher_total", "system_total", "diff", "drifted", "error"}.
+    """
+    a = anchors[index]
+    others = [x for i, x in enumerate(anchors) if i != index]
+    teacher_total = sum(a.marks.get(it.item_id, 0) for it in rubric.items)
+    result = {"anchor_id": a.script_id, "teacher_total": teacher_total, "system_total": None,
+              "diff": None, "drifted": False, "error": None}
+    t = Transcription(legibility="good", text=a.transcription)
+    try:
+        scores = models.generate_json(prompts.GRADE_SYSTEM, prompts.build_grade_prompt(rubric, t, others),
+                                      None, ItemScores, script_id=a.script_id)
+        _, total, _ = rules.apply(rubric, scores, t)
+        result.update(system_total=total, diff=total - teacher_total,
+                      drifted=abs(total - teacher_total) > DRIFT_TOLERANCE)
+    except Exception as e:  # never crash the batch
+        result["error"] = f"{type(e).__name__}: {str(e)[:200]}"
+    audit.log(AuditEntry(actor="system", action="drift_check", script_id=a.script_id,
+                         before=str(teacher_total), after=str(result["system_total"]),
+                         reason="DRIFT WARNING" if result["drifted"] else (result["error"] or "ok"),
+                         backend=models.last_backend_used(),
+                         model=models.model_name(models.last_backend_used())))
+    return result
+
+
 def approve(script_id: str, edits: dict[str, int], teacher: str = "teacher") -> ScriptGrade:
     """Teacher approves a script, optionally editing marks {item_id: new_marks}.
     Every edit and the approval go to the audit log. Total is recomputed by code."""
     grade = next(g for g in store.load_grades() if g.script_id == script_id)
+    allowed = {it.item_id: it.allowed_marks for it in store.load_rubric().items}
+    for item_id, m in edits.items():
+        if item_id in allowed and m not in allowed[item_id]:
+            raise ValueError(f"{item_id}: {m} is not an allowed mark {allowed[item_id]}")
     for item in grade.items:
         if item.item_id in edits and edits[item.item_id] != item.final_marks:
             audit.log(AuditEntry(actor="teacher", action="edit", script_id=script_id,
