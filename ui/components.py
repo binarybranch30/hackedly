@@ -7,7 +7,7 @@ from copilot import audit, config, models, store
 from copilot.schemas import ScriptGrade
 from ui import theme
 
-IMAGE_EXTS = (".jpg", ".jpeg", ".png")
+IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".pdf")
 
 
 def scripts_dir() -> Path:
@@ -28,7 +28,7 @@ FLAG_HELP = {
     "RUNS_DISAGREE": "Two grading runs gave different totals.",
     "RULE_VIOLATION": "The model gave a mark the rubric does not allow (corrected).",
     "MODEL_ERROR": "The model failed to return valid output after retries.",
-    "FALLBACK_USED": "Graded by the local fallback model.",
+    "FALLBACK_USED": "The main model was overloaded; a fallback model graded part of it.",
 }
 
 
@@ -41,8 +41,22 @@ def find_image(script_id: str, folder: Path | None = None) -> Path | None:
     return None
 
 
+@st.cache_data(show_spinner=False, max_entries=64)
+def _render(path: str, mtime: float):
+    return models.load_image(path)
+
+
+def preview(path: Path):
+    """Displayable image for a photo or PDF (PDF pages are rendered and stacked)."""
+    return _render(str(path), path.stat().st_mtime)
+
+
+def model_label() -> str:
+    return "demo data (fake)" if config.MODEL_BACKEND == "fake" else models.model_name(config.MODEL_BACKEND)
+
+
 def save_upload(upload, folder: Path, script_id: str) -> Path:
-    """Save an uploaded image as <folder>/<script_id>.<ext> (replacing older copies)."""
+    """Save an uploaded photo/PDF as <folder>/<script_id>.<ext> (replacing older copies)."""
     folder.mkdir(parents=True, exist_ok=True)
     ext = Path(upload.name).suffix.lower()
     ext = ext if ext in IMAGE_EXTS else ".jpg"
@@ -93,32 +107,30 @@ def show_flash() -> None:
 
 
 def sidebar_status() -> None:
-    """Sample-mode switch and backend card at the bottom of the sidebar."""
+    """Compact sidebar footer: sample-class switch + which model is grading."""
     from copilot import sample  # local import: only the website needs it
 
     with st.sidebar:
-        on = st.toggle("Sample class (demo)", value=config.sample_mode(),
-                       help="Switch to a prepared class that shows every part of the workflow. "
-                            "Your real data is kept separately and comes back when you switch off.")
+        on = st.toggle("Sample class", value=config.sample_mode(),
+                       help="A prepared class (rubric, 3 graded anchors, 8 answer-sheet PDFs) for demos. "
+                            "The sheets are graded live. Your own data is kept separately.")
         if on != config.sample_mode():
             with st.spinner("Preparing the sample class…"):
                 sample.enable() if on else sample.disable()
+            st.session_state.pop("last_run", None)
             st.rerun()
-        if on and st.button("Reset sample class", icon=":material/restart_alt:", width="stretch"):
-            with st.spinner("Rebuilding…"):
-                sample.build()
+        if on and st.button("Reset sample class", icon=":material/restart_alt:", width="stretch",
+                            type="tertiary"):
+            sample.build()
+            st.session_state.pop("last_run", None)
             st.rerun()
-        st.divider()
         backend = config.MODEL_BACKEND
-        st.caption("MODEL BACKEND")
-        st.markdown(f"**{models.model_name(backend)}**  \n`{backend}`")
         if backend == "fake":
-            st.warning("Demo mode: grades are made up. Set `MODEL_BACKEND=gemini` in `.env`.",
-                       icon=":material/science:")
+            st.caption(":orange[:material/science:] Demo backend: grades are made up")
         elif backend == "gemini" and not config.GEMINI_API_KEY:
-            st.error("GEMINI_API_KEY is missing in `.env`.", icon=":material/key_off:")
-        elif config.AUTO_FALLBACK and backend == "gemini":
-            st.caption(f"Falls back to `{config.OLLAMA_MODEL}` on rate limits.")
+            st.caption(":red[:material/key_off:] GEMINI_API_KEY missing in .env")
+        else:
+            st.caption(f":green[:material/circle:] Grading with **{model_label()}**")
 
 
 def drift_entries(limit: int = 5):

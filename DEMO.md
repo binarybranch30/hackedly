@@ -2,18 +2,16 @@
 
 | Time | Show | Say |
 |---|---|---|
-| 0:00 | Title | "A teacher has 40 handwritten scripts tonight. AI can help, but only if she can trust it and stays in control." |
-| 0:20 | Rubric + Anchors tabs | "She grades 3 scripts herself. Those anchors teach Gemma 4 *her* marking style." |
-| 0:45 | Grade tab: run 2 scripts live | "Gemma 4 reads the handwriting, then scores each item and must quote the exact words that earned each mark." |
-| 1:10 | Review tab: evidence highlighted | "Code checks that each quote really exists, and code adds up the total. The model never does the arithmetic." |
-| 1:30 | Flagged scripts: messy + ambiguous | "When it's unsure, it flags the script instead of guessing. Here the two grading runs disagreed." |
-| 1:50 | Teacher edits a mark, approves | "Nothing is released without approval." |
-| 2:05 | Audit tab, then CSV export | "Every change is logged: who, what, before/after." |
-| 2:20 | EVAL.md table | "We measured it: gap to the teacher with and without anchors, consistency over 5 runs, and whether flags catch the hard scripts. Small sample, 7 scripts, and we say so." |
-| 2:45 | Backend switch | "Gemma 4 is open-weight, so the same pipeline runs locally on a laptop with E2B and student data never leaves the school. We measured the quality cost." |
-| 3:00 | End | |
+| 0:00 | **Home** (Sample class on) | "A teacher has 40 handwritten answer sheets tonight. Hackedly grades them with Gemma 4, but the teacher stays in charge." |
+| 0:20 | **Set up**: rubric + 3 anchors | "She grades 3 answers herself. These anchors teach Gemma 4 *her* strictness." |
+| 0:40 | **Grade** → press *Grade 8 sheets now* | "These are 8 PDF answer sheets on the server, not graded yet. Watch: each one is checked, read by Gemma 4, graded twice, and code verifies the evidence and adds up the marks." (about 30–40 s) |
+| 1:20 | Board finished | "The smudged sheet was caught as unreadable instead of guessed. Two grading runs agreeing gives us a consistency check." |
+| 1:40 | **Review** | "Every mark has a word-for-word quote from the answer; code checked that quote exists. She changes a mark and approves." |
+| 2:10 | **Export** popover | "Only approved sheets are released. Every step is in the audit log." |
+| 2:25 | **Insights** | "We measured gap to the teacher, consistency and flag quality. Small sample, and we say so." |
+| 2:45 | Close | "Open-weight Gemma 4 means a school can run this on its own machine; student data never has to leave." |
 
-**Backup:** a pre-recorded video plus real results saved in `data/grades/` in case the wifi dies.
+**Backup:** record a screen video of one live run beforehand, in case the venue internet or the API is slow. If the API is overloaded, the app backs off and falls back to the second Gemma 4 model automatically.
 
 ## Likely judge questions (honest answers)
 **"Can't ChatGPT do this?"**
