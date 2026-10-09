@@ -32,7 +32,26 @@ def roster_editor() -> None:
     st.caption("Add every student in the class. Answer sheets are matched to students by roll number "
                "(e.g. a file named R07.pdf belongs to roll number R07); you can also match them on the "
                "Grade page.")
-    up = st.file_uploader("Import a class list (CSV with roll number and name columns)", type=["csv"],
+    sheets = st.file_uploader("Add students from their answer sheets: files named “R07 Asha Rao.pdf” become "
+                              "roll number R07, Asha Rao (the sheets are queued for grading too)",
+                              type=["pdf", "jpg", "jpeg", "png"], accept_multiple_files=True,
+                              key=f"roster_sheets_{st.session_state.get('roster_up_n', 0)}")
+    if sheets and st.button(f"Add {len(sheets)} sheet(s)", icon=":material/person_add:"):
+        pairs, skipped = [], []
+        for up in sheets:
+            parsed = store.parse_sheet_filename(up.name)
+            if not parsed:
+                skipped.append(up.name)
+                continue
+            pairs.append(parsed)
+            c.save_upload(up, c.scripts_dir(), parsed[0])
+        added = store.add_students(pairs)
+        st.session_state["roster_up_n"] = st.session_state.get("roster_up_n", 0) + 1
+        st.session_state.pop("roster_editor", None)
+        c.flash(f"{added} student(s) added, {len(pairs)} sheet(s) queued."
+                + (f" Skipped (name not like “R07 Name”): {', '.join(skipped)}" if skipped else ""))
+        st.rerun()
+    up = st.file_uploader("Or import a class list (CSV with roll number and name columns)", type=["csv"],
                           key=f"roster_csv_{st.session_state.get('roster_up_n', 0)}")
     if up is not None and st.button("Import students", icon=":material/upload:"):
         try:

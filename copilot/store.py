@@ -3,10 +3,11 @@ in sample mode). Shared by UI and pipeline."""
 import csv
 import io
 import json
+import re
 from pathlib import Path
 
 from copilot import config
-from copilot.schemas import AnchorGrade, Rubric, ScriptGrade
+from copilot.schemas import AnchorGrade, ClassReport, Rubric, ScriptGrade
 
 
 def rubric_path() -> Path:
@@ -92,6 +93,51 @@ def parse_roster_csv(data: bytes) -> list[dict]:
         raise ValueError("The CSV needs a roll number column (roll_no, roll, id or student_id).")
     return [{"roll_no": r[roll].strip(), "name": (r.get(name) or "").strip() if name else ""}
             for r in reader if (r.get(roll) or "").strip()]
+
+
+_SHEET_NAME = re.compile(r"^\s*([A-Za-z]{0,3}\d+)(?:[\s_\-.]+(.*?))?\s*$")
+
+
+def parse_sheet_filename(filename: str) -> tuple[str, str] | None:
+    """'R07 Asha Rao.pdf' -> ('R07', 'Asha Rao'); 'R07.jpg' -> ('R07', '');
+    anything else (e.g. 'IMG_2034.jpg' -> no: 'IMG' has no digits right after) -> None."""
+    m = _SHEET_NAME.match(Path(filename).stem)
+    if not m:
+        return None
+    roll = m.group(1).upper()
+    name = " ".join((m.group(2) or "").replace("_", " ").split())
+    return roll, name.title() if name.islower() else name
+
+
+def add_students(pairs: list[tuple[str, str]]) -> int:
+    """Add (roll_no, name) pairs to the class list; fills in missing names. Returns how many changed."""
+    roster = load_roster()
+    by_roll = {r["roll_no"]: r for r in roster}
+    changed = 0
+    for roll, name in pairs:
+        if roll not in by_roll:
+            roster.append({"roll_no": roll, "name": name})
+            by_roll[roll] = roster[-1]
+            changed += 1
+        elif name and not by_roll[roll]["name"]:
+            by_roll[roll]["name"] = name
+            changed += 1
+    if changed:
+        save_roster(roster)
+    return changed
+
+
+def class_report_path() -> Path:
+    return config.workspace() / "class_report.json"
+
+
+def load_class_report() -> ClassReport | None:
+    p = class_report_path()
+    return ClassReport.model_validate_json(p.read_text(encoding="utf-8")) if p.exists() else None
+
+
+def save_class_report(report: ClassReport) -> None:
+    class_report_path().write_text(report.model_dump_json(indent=2), encoding="utf-8")
 
 
 def student_names() -> dict[str, str]:

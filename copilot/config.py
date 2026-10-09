@@ -68,10 +68,12 @@ AUTO_FALLBACK = os.getenv("AUTO_FALLBACK", "true").lower() == "true"
 # Gemma 4 "thinking" on the Gemini API: minimal is much faster; high may reason better.
 GEMMA_THINKING = os.getenv("GEMMA_THINKING", "minimal")   # minimal | high | off
 PARALLEL_SCRIPTS = int(os.getenv("PARALLEL_SCRIPTS", "4"))  # scripts graded at the same time
-REQUEST_TIMEOUT_S = 180
+REQUEST_TIMEOUT_S = 90
 
 MAX_RETRIES = 2                   # re-ask the model this many times on invalid JSON
-BACKOFF_SECONDS = [5, 15]         # waits after a 429 / 503 (overloaded) error, then fall back
+BACKOFF_SECONDS = [5, 15]         # waits after a 503/500/504 (overloaded) error, then fall back
+QUOTA_BACKOFF_SECONDS = [20, 40]  # waits after a 429 (per-minute quota) before falling back
+GEMINI_RPM = int(os.getenv("GEMINI_RPM", "30"))  # max Gemini calls per minute across all threads (0 = no limit)
 TEMPERATURE = 0.0
 DISAGREE_THRESHOLD = 1            # flag if two grading runs differ by >= this many marks
 EVIDENCE_MATCH_RATIO = 0.85       # fuzzy-match threshold for evidence quotes

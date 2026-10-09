@@ -69,6 +69,15 @@ g = run("tiny_image", [], path=tiny)
 assert g.flags == ["UNREADABLE"]
 g = run("rate_limit", [T_OK, models.RateLimited("429"), models.RateLimited("429"), scores(2), scores(2)])
 assert "FALLBACK_USED" in g.flags
+config.QUOTA_BACKOFF_SECONDS = [0, 0]
+g = run("quota_429", [T_OK, models.RateLimited("429", code=429), models.RateLimited("429", code=429), scores(2), scores(2)])
+assert g.total == 4 and "FALLBACK_USED" not in g.flags, "a 429 is retried on the same model first"
+config.GEMINI_RPM = 2
+models._recent_calls.clear()
+models._rate_gate(); models._rate_gate()
+assert len(models._recent_calls) == 2, "the limiter lets calls through up to the per-minute cap"
+models._recent_calls.clear()
+config.GEMINI_RPM = 0
 g = run("always_bad", [T_OK] + ["{}"] * 3)
 assert "MODEL_ERROR" in g.flags
 

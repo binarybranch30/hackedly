@@ -8,18 +8,21 @@ Functions for the UI / eval:
   extract_rubric(image_path) -> (Rubric, problems)    draft rubric from a question-paper photo
   approve(script_id, edits) / export_csv(path)        teacher approval + release
   mark_unreadable / undo_unreadable / reopen_for_new_scan   "cannot mark, needs rescan"
+  class_report(rubric) -> ClassReport                 class insights (model) + averages (code)
+  draft_feedback / approve_feedback                   per-student feedback, teacher-approved
 """
 import csv
+import queue
 import time
 import uuid
-import queue
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from datetime import datetime, timezone
 from pathlib import Path
 
 
 from copilot import audit, config, models, prompts, rules, store
 from copilot.fake import fake_script_grade
-from copilot.schemas import (FLAG_FALLBACK_USED, FLAG_MODEL_ERROR, FLAG_RUNS_DISAGREE,
+from copilot.schemas import (ClassInsights, ClassReport, FeedbackDraft, FLAG_FALLBACK_USED, FLAG_MODEL_ERROR, FLAG_RUNS_DISAGREE,
                              FLAG_UNREADABLE, AnchorGrade, AuditEntry, GradedItem, ItemScores, Rubric,
                              Script, ScriptGrade, Transcription)
 
@@ -340,6 +343,70 @@ def reopen_for_new_scan(script_id: str) -> bool:
     return True
 
 
+def class_averages(rubric: Rubric, grades: list[ScriptGrade]) -> dict[str, float]:
+    """Average final mark per rubric item over sheets that were actually marked (code, not model)."""
+    marked = [g for g in grades if g.items and g.status != "rescan"]
+    out = {}
+    for it in rubric.items:
+        vals = [next((i.final_marks for i in g.items if i.item_id == it.item_id), 0) for g in marked]
+        out[it.item_id] = round(sum(vals) / len(vals), 2) if vals else 0.0
+    return out
+
+
+def class_report(rubric: Rubric) -> ClassReport:
+    """Gemma 4 reads every marked sheet and writes class insights; code computes the averages.
+    Raises ValueError if there is nothing to analyse, ModelError if the model fails."""
+    sheets = [g for g in store.load_grades()
+              if g.items and g.transcription and g.transcription.text and g.status != "rescan"]
+    if len(sheets) < 2:
+        raise ValueError("Grade at least 2 readable sheets first.")
+    avgs = class_averages(rubric, sheets)
+    insights = models.generate_json(prompts.INSIGHTS_SYSTEM, prompts.build_insights_prompt(rubric, sheets, avgs),
+                                     None, ClassInsights, script_id="class")
+    known = {it.item_id for it in rubric.items}  # code check: drop items the rubric does not have
+    insights.items = [i for i in insights.items if i.item_id in known]
+    report = ClassReport(created=datetime.now(timezone.utc).isoformat(),
+                         model=models.model_name(models.last_backend_used()), n_sheets=len(sheets),
+                         sheet_ids=[g.script_id for g in sheets], averages=avgs,
+                         max_marks={it.item_id: it.max_marks for it in rubric.items}, insights=insights)
+    store.save_class_report(report)
+    audit.log(AuditEntry(actor="system", action="grade", script_id="class",
+                         after=f"class report on {len(sheets)} sheets", reason=insights.struggled_concept[:200],
+                         backend=models.last_backend_used(), model=report.model))
+    return report
+
+
+def draft_feedback(script_id: str, rubric: Rubric) -> tuple[ScriptGrade, list[str]]:
+    """Gemma 4 drafts 2-3 lines of feedback quoting the student. Only for approved sheets.
+    Returns (grade, quotes_not_found): code checks every quote is in the student's answer."""
+    grade = next(g for g in store.load_grades() if g.script_id == script_id)
+    if grade.status not in ("approved", "released"):
+        raise ValueError("Approve the marks before drafting feedback.")
+    if not (grade.transcription and grade.transcription.text):
+        raise ValueError("There is no readable answer to quote.")
+    d = models.generate_json(prompts.FEEDBACK_SYSTEM, prompts.build_feedback_prompt(rubric, grade), None,
+                             FeedbackDraft, script_id=script_id)
+    missing = [q for q in d.quotes if q.strip() and not rules.evidence_found(q, grade.transcription.text)]
+    grade.feedback, grade.feedback_status = d.feedback.strip(), "draft"
+    store.save_grade(grade)
+    audit.log(AuditEntry(actor="system", action="grade", script_id=script_id, after="feedback draft",
+                         reason=("quotes not found: " + "; ".join(missing)) if missing else "quotes verified",
+                         backend=models.last_backend_used(), model=models.model_name(models.last_backend_used())))
+    return grade, missing
+
+
+def approve_feedback(script_id: str, text: str, teacher: str = "teacher") -> ScriptGrade:
+    grade = next(g for g in store.load_grades() if g.script_id == script_id)
+    if not text.strip():
+        raise ValueError("Feedback is empty.")
+    edited = text.strip() != grade.feedback
+    grade.feedback, grade.feedback_status = text.strip(), "approved"
+    store.save_grade(grade)
+    audit.log(AuditEntry(actor="teacher", action="approve", script_id=script_id, after="feedback approved",
+                         reason=f"{teacher}{' (edited)' if edited else ''}"))
+    return grade
+
+
 def export_csv(path: str | Path) -> int:
     """Write APPROVED scripts only to CSV. Returns number of rows written."""
     rubric = store.load_rubric()
@@ -347,11 +414,11 @@ def export_csv(path: str | Path) -> int:
     approved = [g for g in store.load_grades() if g.status in ("approved", "released")]
     with open(path, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["script_id", "name"] + [i.item_id for i in rubric.items] + ["total", "max_total"])
+        w.writerow(["script_id", "name"] + [i.item_id for i in rubric.items] + ["total", "max_total", "feedback"])
         for g in approved:
             marks = {i.item_id: i.final_marks for i in g.items}
             w.writerow([g.script_id, names.get(g.script_id, "")] + [marks.get(i.item_id, "") for i in rubric.items]
-                       + [g.total, g.max_total])
+                       + [g.total, g.max_total, g.feedback if g.feedback_status == "approved" else ""])
     for g in approved:
         if g.status != "released":
             g.status = "released"

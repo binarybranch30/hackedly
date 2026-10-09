@@ -31,6 +31,47 @@ RUBRIC_SYSTEM = (
 )
 
 
+INSIGHTS_SYSTEM = (
+    "You help a teacher understand how a class did on one assessment. You get the rubric, the class "
+    "average for each rubric item, and every student's answer with the marks given. Base everything ONLY "
+    "on these answers: describe mistakes you can actually see in them, not general ones. For each rubric "
+    "item give the most common mistake in one plain sentence (empty if most got it right). Name the one "
+    "concept the class struggled with most, and exactly two short topics to re-teach."
+)
+
+FEEDBACK_SYSTEM = (
+    "You write a short note from the teacher to one student about their answer. 2-3 sentences, kind, "
+    "specific and honest. Quote the student's own words in double quotes at least once, copied exactly "
+    "from their answer. Say one thing they did well and one thing to improve, based on the marks. "
+    "Address the student as 'you'. Do not mention the total mark. List every phrase you quoted in quotes."
+)
+
+
+def build_insights_prompt(rubric: Rubric, sheets: list, averages: dict[str, float]) -> str:
+    """sheets: graded ScriptGrades that have a transcription and item marks."""
+    lines = [f"Question: {rubric.question}", "", "Rubric and class average:"]
+    for it in rubric.items:
+        lines.append(f"[item_id={it.item_id}] {it.description} — average {averages.get(it.item_id, 0):.1f}"
+                     f"/{it.max_marks}")
+    lines += ["", f"Answers from {len(sheets)} students:"]
+    for g in sheets:
+        marks = ", ".join(f"{i.item_id}={i.final_marks}" for i in g.items)
+        text = g.transcription.text.replace("\n", " ")[:700]
+        lines += [f"--- {g.script_id} ({marks}) ---", text]
+    return "\n".join(lines)
+
+
+def build_feedback_prompt(rubric: Rubric, grade) -> str:
+    lines = [f"Question: {rubric.question}", "", "Marks for this student:"]
+    marks = {i.item_id: i for i in grade.items}
+    for it in rubric.items:
+        m = marks.get(it.item_id)
+        lines.append(f"- {it.item_id} {it.description}: {m.final_marks if m else 0}/{it.max_marks}"
+                     + (f" ({m.reasoning})" if m and m.reasoning else ""))
+    lines += ["", "The student's answer:", grade.transcription.text if grade.transcription else ""]
+    return "\n".join(lines)
+
+
 def build_grade_prompt(rubric: Rubric, transcription: Transcription,
                        anchors: list[AnchorGrade] | None) -> str:
     """Build the grading prompt.

@@ -132,6 +132,38 @@ with work_col:
                 if it and edits[r.item_id] != it.marks_awarded:
                     st.caption(f"Gemma suggested {it.marks_awarded}")
 
+    if g.status in ("approved", "released"):
+        with st.container(border=True):
+            fb_l, fb_r = st.columns([3, 2], vertical_alignment="center")
+            fb_l.markdown("**Feedback for the student**")
+            status_txt = {"none": "not written yet", "draft": "Gemma 4 draft, waiting for you",
+                          "approved": "approved by you"}[g.feedback_status]
+            fb_l.caption(status_txt)
+            if fb_r.button("Redraft" if g.feedback else "Draft with Gemma 4", icon=":material/auto_awesome:",
+                           key=f"fbd-{g.script_id}", width="stretch"):
+                try:
+                    with st.spinner("Writing feedback…"):
+                        _, missing = pipeline.draft_feedback(g.script_id, rubric)
+                    st.session_state[f"fbmiss-{g.script_id}"] = missing
+                    st.session_state.pop(f"fbt-{g.script_id}", None)
+                    st.rerun()
+                except Exception as e:  # noqa: BLE001
+                    st.error(str(e))
+            if g.feedback:
+                missing = st.session_state.get(f"fbmiss-{g.script_id}", [])
+                if missing:
+                    st.warning("Gemma quoted words that are not in the answer: " + "; ".join(f"“{m}”" for m in missing)
+                               + ". Fix them before approving.", icon=":material/error:")
+                text = st.text_area("Feedback", g.feedback, key=f"fbt-{g.script_id}", height=110,
+                                    label_visibility="collapsed")
+                if st.button("Approve feedback" if g.feedback_status != "approved" or text != g.feedback
+                             else "Feedback approved", type="primary", icon=":material/check:",
+                             disabled=g.feedback_status == "approved" and text == g.feedback,
+                             key=f"fba-{g.script_id}"):
+                    pipeline.approve_feedback(g.script_id, text)
+                    c.flash(f"Feedback for {g.script_id} approved.")
+                    st.rerun()
+
     new_total = sum(edits.values())
     f1, f2 = st.columns([2, 3], vertical_alignment="center")
     f1.markdown(f"### Total {new_total}/{rubric.max_total}"

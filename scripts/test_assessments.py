@@ -49,6 +49,49 @@ try:
         raise AssertionError("roster without roll numbers should fail")
     except ValueError:
         pass
+    # Sheet file names carry roll number + student name
+    P = store.parse_sheet_filename
+    assert P("R07 Asha Rao.pdf") == ("R07", "Asha Rao") and P("r7_bilal khan.jpg") == ("R7", "Bilal Khan")
+    assert P("R12.pdf") == ("R12", "") and P("R03 - Chitra Iyer.PDF") == ("R03", "Chitra Iyer")
+    assert P("IMG_2034.jpg") is None and P("scan.pdf") is None
+    c = assessments.create("Names test")
+    assert store.add_students([("R07", "Asha Rao"), ("R08", "")]) == 2
+    assert store.add_students([("R08", "Dev Shah"), ("R07", "Other")]) == 1   # fills blanks, keeps names
+    assert store.student_names() == {"R07": "Asha Rao", "R08": "Dev Shah"}
+
+    # Class insights: averages by code, insights by model (fake), saved per assessment
+    rubric = store.load_rubric()
+    from copilot.schemas import Rubric, RubricItem
+    rubric = Rubric(rubric_id="t", question="Q", items=[
+        RubricItem(item_id="1a", description="law", max_marks=2, allowed_marks=[0, 1, 2]),
+        RubricItem(item_id="1b", description="symbols", max_marks=1, allowed_marks=[0, 1])])
+    store.save_rubric(rubric)
+    try:
+        pipeline.class_report(rubric)
+        raise AssertionError("needs at least 2 sheets")
+    except ValueError:
+        pass
+    for sid in ("R07", "R08"):
+        pipeline.grade_script(Script(script_id=sid, image_path="x.jpg"), rubric, [])
+    rep = pipeline.class_report(rubric)
+    grades = store.load_grades()
+    exp = sum(next(i.final_marks for i in g.items if i.item_id == "1a") for g in grades) / 2
+    assert rep.averages["1a"] == round(exp, 2) and rep.n_sheets == 2 and len(rep.insights.reteach_topics) == 2
+    assert store.load_class_report().insights.struggled_concept
+
+    # Feedback: only after approval; quotes checked against the answer; teacher approves edits
+    try:
+        pipeline.draft_feedback("R07", rubric)
+        raise AssertionError("feedback before approval must fail")
+    except ValueError:
+        pass
+    pipeline.approve("R07", {})
+    g, missing = pipeline.draft_feedback("R07", rubric)
+    assert g.feedback_status == "draft" and g.feedback and missing == [], (g.feedback, missing)
+    pipeline.approve_feedback("R07", g.feedback + " Well done.")
+    out = tmp / "fb.csv"
+    pipeline.export_csv(out)
+    assert out.read_text().splitlines()[0].endswith(",feedback") and "Well done." in out.read_text()
     print("ALL ASSESSMENT TESTS PASSED")
 finally:
     config.DATA_DIR = real

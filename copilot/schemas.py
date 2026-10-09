@@ -10,7 +10,7 @@ Two kinds of models live here:
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 Confidence = Literal["high", "medium", "low"]
 Legibility = Literal["good", "partial", "unreadable"]
@@ -83,6 +83,34 @@ class ItemScores(BaseModel):
     items: list[ItemScore]
 
 
+class ItemInsight(BaseModel):
+    item_id: str
+    common_mistake: str = Field(description="The most common mistake on this item, one sentence; "
+                                            "empty if most students got it right")
+
+
+class ClassInsights(BaseModel):
+    items: list[ItemInsight]
+    struggled_concept: str = Field(description="The one concept the class struggled with most")
+    # No minItems/maxItems in the schema: with them, Gemma 4's constrained decoding on the
+    # Gemini API hangs until timeout (measured 2026-10-09). The rule is checked in code instead.
+    reteach_topics: list[str] = Field(description="Exactly two short topics to re-teach")
+    summary: str = Field(description="Two sentences for the teacher")
+
+    @field_validator("reteach_topics")
+    @classmethod
+    def _two_topics(cls, v: list[str]) -> list[str]:
+        v = [t.strip() for t in v if t.strip()]
+        if len(v) < 2:
+            raise ValueError("give exactly two re-teach topics")
+        return v[:2]
+
+
+class FeedbackDraft(BaseModel):
+    feedback: str = Field(description="2-3 sentences to the student, kind and specific")
+    quotes: list[str] = Field(description="The exact phrases from the student's answer that the feedback quotes")
+
+
 # ---------- BUILT BY CODE ----------
 
 class GradedItem(ItemScore):
@@ -105,6 +133,19 @@ class ScriptGrade(BaseModel):
     seconds: float = 0.0              # wall-clock time to grade this script
     model_calls: int = 0              # number of model requests (incl. retries)
     teacher_note: str = ""            # e.g. why the teacher could not mark it
+    feedback: str = ""                # short note to the student (AI draft, teacher-edited)
+    feedback_status: Literal["none", "draft", "approved"] = "none"
+
+
+class ClassReport(BaseModel):
+    """Class insights (model) + per-item class averages (code)."""
+    created: str
+    model: str
+    n_sheets: int
+    sheet_ids: list[str]
+    averages: dict[str, float]        # item_id -> class average mark (computed by code)
+    max_marks: dict[str, int]
+    insights: ClassInsights
 
 
 class AuditEntry(BaseModel):
