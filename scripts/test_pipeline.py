@@ -38,6 +38,7 @@ def fake_backend(replies):
     q = list(replies)
 
     def call(backend, system, prompt, image_path, schema):
+        models._call_count += 1
         r = q.pop(0)
         if isinstance(r, Exception):
             raise r
@@ -53,9 +54,9 @@ def run(name, replies, path=img):
 
 
 g = run("clean", [T_OK, scores(2), scores(2)])
-assert g.total == 4 and g.status == "auto_ok" and not g.flags
+assert g.total == 4 and g.status == "auto_ok" and not g.flags and g.model_calls == 3
 g = run("bad_json", [T_OK, "not json", scores(2), scores(2)])
-assert g.total == 4 and not g.flags
+assert g.total == 4 and not g.flags and g.model_calls == 4
 g = run("disagree", [T_OK, scores(2), scores(0, quote="")])
 assert "RUNS_DISAGREE" in g.flags
 g = run("hallucinate", [T_OK, scores(2, quote="Newton's third law"), scores(2, quote="Newton's third law")])

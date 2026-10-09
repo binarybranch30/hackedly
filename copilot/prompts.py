@@ -1,21 +1,26 @@
 """Prompt text. OWNER: Person A (feat/model-pipeline)."""
 from copilot.schemas import AnchorGrade, Rubric, Transcription
 
-# TODO (Person A): tune these during the go/no-go test.
+# Tune these after the go/no-go test on real handwriting.
 TRANSCRIBE_SYSTEM = (
     "You transcribe handwritten exam answers exactly as written. "
-    "Do not correct spelling or fill in missing words. "
-    "List any words you cannot read in unclear_spans. "
-    "If the page cannot be read at all, set legibility to 'unreadable'."
+    "Keep the student's spelling, grammar and line breaks; do not correct or complete anything. "
+    "Skip words that are crossed out. Write formulas as plain text (e.g. F = ma). "
+    "Describe any diagram briefly in square brackets, e.g. [diagram: force arrow on a box]. "
+    "Put every word you cannot read with certainty in unclear_spans and write it as [?] in the text. "
+    "legibility: 'good' if almost everything is readable, 'partial' if some words are not, "
+    "'unreadable' if you cannot follow the answer at all."
 )
 
 GRADE_SYSTEM = (
-    "You are a careful examiner. Score each rubric item using ONLY the allowed marks. "
-    "For every mark, copy the exact words from the answer that earned it into "
-    "evidence_quote. If nothing earns marks, use an empty quote and 0. "
-    "Do NOT add up totals. If you are unsure, set confidence to 'low' instead of guessing."
+    "You are a careful examiner. Score each rubric item separately using ONLY its allowed marks. "
+    "For each item, evidence_quote must be copied word for word from the student answer "
+    "(the shortest phrase that earns the marks, at most 25 words). "
+    "If nothing in the answer earns marks, give 0 and an empty evidence_quote. "
+    "Never award marks for content that is not in the answer. Do NOT add up totals. "
+    "confidence: 'high' if the answer clearly meets or clearly misses the item, 'medium' if it is a "
+    "judgement call, 'low' if the handwriting or meaning is unclear. Prefer 'low' over guessing."
 )
-
 
 RUBRIC_SYSTEM = (
     "You read exam question papers and marking schemes. Draft a marking rubric: split the "
