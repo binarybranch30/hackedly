@@ -343,13 +343,14 @@ def reopen_for_new_scan(script_id: str) -> bool:
 def export_csv(path: str | Path) -> int:
     """Write APPROVED scripts only to CSV. Returns number of rows written."""
     rubric = store.load_rubric()
+    names = store.student_names()
     approved = [g for g in store.load_grades() if g.status in ("approved", "released")]
     with open(path, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["script_id"] + [i.item_id for i in rubric.items] + ["total", "max_total"])
+        w.writerow(["script_id", "name"] + [i.item_id for i in rubric.items] + ["total", "max_total"])
         for g in approved:
             marks = {i.item_id: i.final_marks for i in g.items}
-            w.writerow([g.script_id] + [marks.get(i.item_id, "") for i in rubric.items]
+            w.writerow([g.script_id, names.get(g.script_id, "")] + [marks.get(i.item_id, "") for i in rubric.items]
                        + [g.total, g.max_total])
     for g in approved:
         if g.status != "released":

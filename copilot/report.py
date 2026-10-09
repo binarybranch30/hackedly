@@ -71,8 +71,8 @@ def _find_image_file(script_id: str, image_dir: Optional[Path | str] = None) -> 
     search_dirs = []
     if image_dir:
         search_dirs.append(Path(image_dir))
-    search_dirs.append(config.DATA_DIR / "scripts")
-    search_dirs.append(config.DATA_DIR / "anchors")
+    search_dirs.append(config.workspace() / "scripts")
+    search_dirs.append(config.workspace() / "anchors")
 
     for d in search_dirs:
         if not d.exists():

@@ -7,13 +7,29 @@ from ui import components as c
 from ui import theme
 
 theme.page_header("Grade", "Gemma 4 reads each answer sheet and grades it against your rubric. "
-                  "Code checks every mark. Unsure sheets go to you.")
+                  "Code checks every mark. Unsure sheets go to you.", eyebrow=c.workspace_label())
+c.show_flash()
+
+if not config.sample_mode() and not config.active_assessment():
+    st.info("Create an assessment first: it holds the rubric, students and answer sheets.",
+            icon=":material/add:")
+    st.page_link("views/setup.py", label="Set up an assessment", icon=":material/arrow_forward:")
+    st.stop()
 
 rubric = store.load_rubric()
+if not rubric.items:
+    st.info("This assessment has no rubric yet. Add one before grading.", icon=":material/rule:")
+    st.page_link("views/setup.py", label="Write the rubric", icon=":material/arrow_forward:")
+    st.stop()
+
 anchors = store.load_anchors()
-graded = {g.script_id for g in store.load_grades()}
+roster = store.load_roster()
+names = store.student_names()
+grades = {g.script_id: g for g in store.load_grades()}
 files = sorted(p for p in c.scripts_dir().glob("*") if p.suffix.lower() in c.IMAGE_EXTS)
-waiting = [p for p in files if p.stem not in graded]
+waiting = [p for p in files if p.stem not in grades]
+have_sheet = {p.stem for p in files}
+missing = [r for r in roster if r["roll_no"] not in have_sheet]
 
 st.markdown(board.flow_strip(), unsafe_allow_html=True)
 
@@ -21,39 +37,77 @@ with st.container(border=True):
     left, right = st.columns([3, 2], gap="large", vertical_alignment="center")
     with left:
         st.markdown(f"**{len(waiting)} answer sheet(s) waiting**" if waiting else "**No sheets waiting**")
-        if waiting:
-            st.caption(" · ".join(p.name for p in waiting[:10]) + (" …" if len(waiting) > 10 else ""))
-        st.caption(f"Rubric: {len(rubric.items)} items, {rubric.max_total} marks · "
-                   f"{len(anchors)} anchor script(s) · model: {c.model_label()}")
+        bits = [f"{len(rubric.items)} rubric items · {rubric.max_total} marks",
+                f"{len(anchors)} anchor(s)", f"model: {c.model_label()}"]
+        if roster:
+            bits.insert(0, f"{len(roster)} students · {len(have_sheet & set(names))} with a sheet")
+        st.caption(" · ".join(bits))
     with right:
         go = st.button(f"Grade {len(waiting)} sheet(s) now" if waiting else "Nothing to grade",
                        type="primary", icon=":material/play_arrow:", disabled=not waiting, width="stretch")
-    with st.expander("Add answer sheets or change settings"):
-        uploads = st.file_uploader("Photos or PDFs, one answer per file. The file name becomes the sheet ID.",
-                                   type=["jpg", "jpeg", "png", "pdf"], accept_multiple_files=True)
-        if uploads and st.button("Add to queue", icon=":material/add:"):
+
+    up_col, opt_col = st.columns([3, 2], gap="large")
+    with up_col:
+        uploads = st.file_uploader("Add answer sheets: photos or PDFs, one student per file. Name files by roll "
+                                   "number (R07.pdf) or match them to students below.",
+                                   type=["jpg", "jpeg", "png", "pdf"], accept_multiple_files=True,
+                                   key=f"sheets_up_{st.session_state.get('sheets_up_n', 0)}")
+        if uploads and st.button(f"Add {len(uploads)} file(s)", icon=":material/add:"):
+            st.session_state["sheets_up_n"] = st.session_state.get("sheets_up_n", 0) + 1  # empties the box
             for up in uploads:
                 sid = c.script_id_from_name(up.name)
                 c.save_upload(up, c.scripts_dir(), sid)
                 pipeline.reopen_for_new_scan(sid)  # a new scan replaces one marked "needs rescan"
+            c.flash(f"Added {len(uploads)} file(s).")
             st.rerun()
-        calibrated = st.toggle("Use my anchor scripts to calibrate", value=bool(anchors), disabled=not anchors,
-                               help="Puts your 3 graded anchors in the prompt so the model marks like you.")
-        if graded and st.button("Clear previous results and grade everything again",
-                                icon=":material/restart_alt:"):
-            for g in store.load_grades():
-                (store.grades_dir() / f"{g.script_id}.json").unlink(missing_ok=True)
+    with opt_col:
+        calibrated = st.toggle("Calibrate with my anchor scripts", value=bool(anchors), disabled=not anchors,
+                               help="Puts your graded anchors in the prompt so the model marks like you.")
+        if grades and st.button("Clear all marks and grade again", icon=":material/restart_alt:",
+                                type="tertiary"):
+            for sid in grades:
+                (store.grades_dir() / f"{sid}.json").unlink(missing_ok=True)
             st.session_state.pop("last_run", None)
             st.rerun()
 
+# Match sheets to students (needed when files are named like IMG_2034.jpg)
+unmatched = [p for p in waiting if roster and p.stem not in names]
+if roster and (unmatched or missing):
+    with st.expander(f"Match sheets to students · {len(unmatched)} unmatched file(s), "
+                     f"{len(missing)} student(s) without a sheet", icon=":material/link:",
+                     expanded=bool(unmatched)):
+        if unmatched:
+            free = [r["roll_no"] for r in missing]
+            table = st.data_editor(
+                [{"file": p.name, "student": None} for p in unmatched], hide_index=True, width="stretch",
+                disabled=["file"], key="match_editor",
+                column_config={"file": st.column_config.TextColumn("File"),
+                               "student": st.column_config.SelectboxColumn(
+                                   "Student", options=[f"{r} · {names.get(r, '')}" for r in free])})
+            if st.button("Apply matches", icon=":material/link:"):
+                done = 0
+                for row in table:
+                    if row["student"]:
+                        roll = row["student"].split(" · ")[0]
+                        src = c.scripts_dir() / row["file"]
+                        if src.exists() and not c.find_image(roll):
+                            src.rename(src.with_name(roll + src.suffix.lower()))
+                            done += 1
+                c.flash(f"Matched {done} sheet(s).")
+                st.rerun()
+        if missing:
+            st.caption("No sheet yet: " + ", ".join(f"{r['roll_no']} {r['name']}".strip() for r in missing[:40])
+                       + (" …" if len(missing) > 40 else ""))
+
 if go:
     ids = [p.stem for p in waiting]
+    labels = {i: c.student_label(i) for i in ids}
     state, results = {}, {}
     status_line = st.empty()
     holder = st.empty()
 
     def redraw():
-        holder.markdown(board.render(ids, state, results), unsafe_allow_html=True)
+        holder.markdown(board.render(ids, state, results, labels), unsafe_allow_html=True)
 
     def on_event(sid, step, status, detail):
         state[(sid, step)] = (status, detail)
@@ -66,14 +120,14 @@ if go:
 
     redraw()
     status_line.markdown(f"**Grading {len(ids)} sheet(s), {min(len(ids), config.PARALLEL_SCRIPTS)} at a time…**")
-    grades, drift = pipeline.grade_batch([Script(script_id=p.stem, image_path=str(p)) for p in waiting],
-                                         rubric, anchors, calibrated=calibrated,
-                                         on_progress=on_progress, on_event=on_event)
-    st.session_state["last_run"] = {"ids": ids, "state": state, "drift": drift}
+    _, drift = pipeline.grade_batch([Script(script_id=p.stem, image_path=str(p)) for p in waiting],
+                                    rubric, anchors, calibrated=calibrated,
+                                    on_progress=on_progress, on_event=on_event)
+    st.session_state["last_run"] = {"ids": ids, "state": state, "drift": drift, "ws": str(config.workspace())}
     st.rerun()
 
 run = st.session_state.get("last_run")
-if run:
+if run and run.get("ws", str(config.workspace())) == str(config.workspace()):
     results = {g.script_id: g for g in store.load_grades()}
     done = [results[i] for i in run["ids"] if i in results]
     need = sum(g.status == "needs_review" for g in done)
@@ -82,7 +136,8 @@ if run:
               icon=":material/task_alt:")
     if need:
         b.page_link("views/review.py", label="Review now", icon=":material/arrow_forward:")
-    st.markdown(board.render(run["ids"], run["state"], results), unsafe_allow_html=True)
+    st.markdown(board.render(run["ids"], run["state"], results, {i: c.student_label(i) for i in run["ids"]}),
+                unsafe_allow_html=True)
     for d in run["drift"]:
         if d.get("drifted"):
             st.warning(f"Drift check: anchor {d['anchor_id']} got {d['system_total']} from the system, "

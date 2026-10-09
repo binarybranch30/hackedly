@@ -10,23 +10,49 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
 AUDIT_PATH = ROOT / "audit.jsonl"
 
-# Sample mode: a separate, prepared workspace for demos (data/sample/).
-# Real data in data/ is never touched while sample mode is on.
-SAMPLE_DIR = DATA_DIR / "sample"
-SAMPLE_FLAG = DATA_DIR / ".sample_mode"
+# Workspaces: every assessment (one rubric + its class, anchors, sheets and grades)
+# lives in its own folder, data/assessments/<slug>/. Sample mode uses data/sample/.
+# Paths are computed from DATA_DIR at call time (tests point DATA_DIR elsewhere).
+
+
+def sample_dir() -> Path:
+    return DATA_DIR / "sample"
+
+
+def sample_flag() -> Path:
+    return DATA_DIR / ".sample_mode"
+
+
+def assessments_dir() -> Path:
+    return DATA_DIR / "assessments"
+
+
+def active_file() -> Path:
+    return DATA_DIR / ".active_assessment"
 
 
 def sample_mode() -> bool:
-    return SAMPLE_FLAG.exists()
+    return sample_flag().exists()
+
+
+def active_assessment() -> str:
+    """Slug of the selected assessment, or "" if none (then data/ itself is used)."""
+    f = active_file()
+    slug = f.read_text(encoding="utf-8").strip() if f.exists() else ""
+    return slug if slug and (assessments_dir() / slug).is_dir() else ""
 
 
 def workspace() -> Path:
-    """Folder holding the active rubric, anchors, grades and photos."""
-    return SAMPLE_DIR if sample_mode() else DATA_DIR
+    """Folder holding the active rubric, anchors, roster, sheets and grades."""
+    if sample_mode():
+        return sample_dir()
+    slug = active_assessment()
+    return assessments_dir() / slug if slug else DATA_DIR
 
 
 def audit_path() -> Path:
-    return SAMPLE_DIR / "audit.jsonl" if sample_mode() else AUDIT_PATH
+    ws = workspace()
+    return AUDIT_PATH if ws == DATA_DIR else ws / "audit.jsonl"
 
 # The ONE switch: gemini | ollama | fake
 MODEL_BACKEND = os.getenv("MODEL_BACKEND", "fake").lower()

@@ -58,9 +58,10 @@ def _cell(state: tuple[str, str] | None) -> str:
             f"<span class='dt'>{html.escape(detail)}</span></div></td>")
 
 
-def render(rows: list[str], state: dict, results: dict) -> str:
+def render(rows: list[str], state: dict, results: dict, labels: dict | None = None) -> str:
     """rows: script ids in display order; state[(sid, step)] = (status, detail);
-    results[sid] = ScriptGrade once finished."""
+    results[sid] = ScriptGrade once finished; labels[sid] = text shown for the sheet."""
+    labels = labels or {}
     head = "<tr><th>Sheet</th>" + "".join(
         f"<th>{t}<small>{w}</small></th>" for _, t, w in COLUMNS) + "<th>Result</th></tr>"
     body = []
@@ -74,7 +75,7 @@ def render(rows: list[str], state: dict, results: dict) -> str:
             label = "needs review" if review else "auto-OK"
             result = (f"<td><span class='score'>{g.total}/{g.max_total}</span>"
                       f"<span class='pill' style='background:{pill_c}22;color:{pill_c}'>{label}</span></td>")
-        body.append(f"<tr><td>{html.escape(sid)}</td>" +
+        body.append(f"<tr><td>{html.escape(labels.get(sid, sid))}</td>" +
                     "".join(_cell(state.get((sid, k))) for k, _, _ in COLUMNS) + result + "</tr>")
     return CSS + f"<table class='pb'>{head}{''.join(body)}</table>"
 
