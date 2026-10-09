@@ -11,7 +11,19 @@ An AI copilot that helps teachers grade **handwritten answer sheets**, built at 
 > Demo GIF / screenshot: TODO
 
 ## How it works
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the pipeline diagram, schemas and failure handling.
+For each answer photo, the workflow runs these steps:
+
+1. **Image check** (code): the photo is rotated upright and shrunk. Unusable images are flagged `UNREADABLE`.
+2. **Read** (Gemma 4 vision): the photo is transcribed into structured JSON (`legibility`, `text`, `unclear_spans`).
+3. **Grade ×2** (Gemma 4): the rubric and the teacher's 3 anchor scripts go in as examples. For every item, the model returns marks, an exact evidence quote and a confidence. Grading runs twice to check consistency.
+4. **Rules** (code): checks that each quote is really in the answer, snaps marks to allowed values, and adds up the total.
+5. **Route**: if the model reported low confidence, a quote is missing, the two runs disagree, the image is unreadable, the model failed, or the fallback model was used, the script goes to **teacher review**.
+6. **Approve → release**: the teacher edits marks and approves. The CSV export includes approved scripts only.
+7. **Drift check**: every 5 scripts, an anchor is re-graded and compared with the teacher's marks.
+
+Every step is written to `audit.jsonl`. Model replies are validated against a schema and retried with the error message. On rate limits the system backs off, then falls back to local Gemma. The teacher can also start from a **photo of the question paper**: Gemma 4 drafts the rubric, code checks it, and the teacher approves it.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the diagram, schemas and failure handling.
 
 ## Models
 | Role | Model | How |
@@ -35,6 +47,14 @@ python scripts\smoke_test.py
 streamlit run app.py
 ```
 macOS/Linux: `python3 -m venv .venv && source .venv/bin/activate`, then the same commands.
+
+## Useful scripts
+| Command | What it does |
+|---|---|
+| `python scripts/smoke_test.py` | Quick end-to-end check (works with `MODEL_BACKEND=fake`) |
+| `python scripts/test_pipeline.py` | Offline tests of every failure path (no API key needed) |
+| `python scripts/gonogo.py a.jpg b.jpg c.jpg` | Try the real model on real handwriting |
+| `streamlit run ui/preview.py` | Style preview of the dashboard theme |
 
 ## Evaluation
 `python eval/run_eval.py`. Results and the small-sample disclosure are in [EVAL.md](EVAL.md).
